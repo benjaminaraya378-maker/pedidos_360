@@ -1,0 +1,31 @@
+<div class="encabezado">
+  <div>
+    <h1>Administración</h1>
+    <p>Todos los pedidos del sistema vía <code>GET /api/bff/admin/pedidos</code> (exige el app role <strong>Admin</strong>; 403 en caso contrario).</p>
+  </div>
+</div>
+@if (error()) { <div class="aviso aviso--error" role="alert">{{ error() }}</div> }
+@if (pedidos(); as lista) {
+  @if (lista.length === 0) {
+    <div class="vacio">Todavía no hay pedidos registrados.</div>
+  } @else {
+    <section class="tarjeta">
+      <table class="tabla">
+        <thead><tr><th>Pedido</th><th>Cliente</th><th>Fecha</th><th>Estado</th><th class="numero">Total</th></tr></thead>
+        <tbody>
+          @for (p of lista; track p.id) {
+            <tr>
+              <td>#{{ p.id }}</td>
+              <td>{{ p.clienteEmail || p.clienteNombre }}</td>
+              <td>{{ p.fecha | date: 'dd-MM-yyyy HH:mm' }}</td>
+              <td><span class="etiqueta etiqueta--{{ p.estado }}">{{ p.estado }}</span></td>
+              <td class="numero">{{ p.total | currency: 'CLP' : 'symbol-narrow' : '1.0-0' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </section>
+  }
+} @else if (!error()) {
+  <p class="cargando">Consultando al BFF…</p>
+}

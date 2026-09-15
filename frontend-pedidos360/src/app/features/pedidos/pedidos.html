@@ -1,0 +1,82 @@
+<div class="encabezado">
+  <div>
+    <h1>{{ auth.isAdmin() ? 'Todos los pedidos' : 'Mis pedidos' }}</h1>
+    <p>
+      ms-pedidos filtra por el claim <code>oid</code> del token: un cliente solo ve lo suyo, un Admin ve todo.
+    </p>
+  </div>
+  <button type="button" class="boton boton--secundario" (click)="cargar()">Actualizar</button>
+</div>
+
+@if (mensaje()) { <div class="aviso aviso--exito" role="status">{{ mensaje() }}</div> }
+@if (error()) { <div class="aviso aviso--error" role="alert">{{ error() }}</div> }
+
+<div class="dos-columnas">
+  <section>
+    @if (cargando()) {
+      <p class="cargando">Cargando pedidos…</p>
+    } @else if (pedidos().length === 0) {
+      <div class="vacio">Todavía no tienes pedidos. Arma uno desde el <a routerLink="/productos">catálogo</a>.</div>
+    } @else {
+      <div class="lista">
+        @for (p of pedidos(); track p.id) {
+          <article class="pedido" [attr.data-estado]="p.estado">
+            <header class="pedido__cabecera">
+              <div>
+                <strong>Pedido #{{ p.id }}</strong>
+                <span class="silencio"> · {{ p.fecha | date: 'dd-MM-yyyy HH:mm' }}</span>
+                @if (auth.isAdmin()) { <span class="silencio"> · {{ p.clienteEmail || p.clienteNombre }}</span> }
+              </div>
+              <span class="etiqueta etiqueta--{{ p.estado }}">{{ p.estado.replace('_', ' ') }}</span>
+            </header>
+            <table class="tabla">
+              <thead>
+                <tr><th>Producto</th><th class="numero">Cant.</th><th class="numero">Unitario</th><th class="numero">Subtotal</th></tr>
+              </thead>
+              <tbody>
+                @for (i of p.items; track i.productoId) {
+                  <tr>
+                    <td>{{ i.nombreProducto }}</td>
+                    <td class="numero">{{ i.cantidad }}</td>
+                    <td class="numero">{{ i.precioUnitario | currency: 'CLP' : 'symbol-narrow' : '1.0-0' }}</td>
+                    <td class="numero">{{ i.subtotal | currency: 'CLP' : 'symbol-narrow' : '1.0-0' }}</td>
+                  </tr>
+                }
+              </tbody>
+              <tfoot>
+                <tr><td colspan="3" class="numero"><strong>Total</strong></td><td class="numero"><strong>{{ p.total | currency: 'CLP' : 'symbol-narrow' : '1.0-0' }}</strong></td></tr>
+              </tfoot>
+            </table>
+          </article>
+        }
+      </div>
+    }
+  </section>
+
+  <aside class="tarjeta carrito">
+    <h2>Nuevo pedido</h2>
+    @if (carrito.lineas().length === 0) {
+      <p class="silencio">Agrega productos desde el catálogo para armar un pedido.</p>
+    } @else {
+      <ul class="carrito__lista">
+        @for (l of carrito.lineas(); track l.producto.id) {
+          <li>
+            <div>
+              <strong>{{ l.producto.nombre }}</strong>
+              <span class="silencio"> · {{ l.producto.precio | currency: 'CLP' : 'symbol-narrow' : '1.0-0' }}</span>
+            </div>
+            <div class="fila">
+              <input type="number" min="0" [max]="l.producto.stock" [value]="l.cantidad" aria-label="Cantidad"
+                     (change)="carrito.cambiarCantidad(l.producto.id, cantidadDesdeEvento($event))" />
+              <button type="button" class="boton boton--secundario boton--pequeno" (click)="carrito.quitar(l.producto.id)">Quitar</button>
+            </div>
+          </li>
+        }
+      </ul>
+      <p class="carrito__total">Total: <strong>{{ carrito.total() | currency: 'CLP' : 'symbol-narrow' : '1.0-0' }}</strong></p>
+      <button type="button" class="boton" [disabled]="enviando()" (click)="confirmar()">
+        {{ enviando() ? 'Enviando…' : 'Confirmar pedido' }}
+      </button>
+    }
+  </aside>
+</div>

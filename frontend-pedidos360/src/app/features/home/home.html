@@ -1,0 +1,45 @@
+<section class="portada">
+  <div>
+    <p class="portada__contexto">Sistema de pedidos · Desarrollo Cloud Native I</p>
+    <h1>Pedidos360</h1>
+    <p class="portada__texto">
+      Inicio de sesión con Microsoft Entra (OpenID Connect, Authorization Code + PKCE); cada llamada al backend
+      pasa por AWS API Gateway con el JWT, y los microservicios Spring Boot en EC2 lo vuelven a validar.
+    </p>
+    <div class="fila">
+      @if (auth.isLoggedIn()) {
+        <a routerLink="/productos" class="boton">Ver catálogo</a>
+        <a routerLink="/perfil" class="boton boton--secundario">Ver mis tokens</a>
+      } @else {
+        <button type="button" class="boton" (click)="auth.login()">Iniciar sesión o crear cuenta</button>
+      }
+    </div>
+  </div>
+
+  @if (auth.isLoggedIn()) {
+    <aside class="tarjeta">
+      <h2>Resumen (BFF)</h2>
+      <p class="silencio"><code>GET /api/bff/dashboard</code> compone ms-productos y ms-pedidos con tu token.</p>
+      @if (error()) { <div class="aviso aviso--error" role="alert">{{ error() }}</div> }
+      @if (dashboard(); as d) {
+        <dl class="claves">
+          <div><dt>Usuario</dt><dd>{{ d.usuario.nombre }} · {{ d.usuario.roles.join(', ') || 'Cliente' }}</dd></div>
+          <div><dt>Productos disponibles</dt><dd>{{ d.productosDisponibles }}</dd></div>
+          <div><dt>Mis pedidos</dt><dd>{{ d.misPedidos }}</dd></div>
+        </dl>
+        @if (d.ultimosPedidos.length > 0) {
+          <table class="tabla">
+            <thead><tr><th>Pedido</th><th>Fecha</th><th class="numero">Total</th></tr></thead>
+            <tbody>
+              @for (p of d.ultimosPedidos; track p.id) {
+                <tr><td>#{{ p.id }}</td><td>{{ p.fecha | date: 'dd-MM-yyyy' }}</td><td class="numero">{{ p.total | currency: 'CLP' : 'symbol-narrow' : '1.0-0' }}</td></tr>
+              }
+            </tbody>
+          </table>
+        }
+      } @else if (!error()) {
+        <p class="cargando">Consultando al BFF…</p>
+      }
+    </aside>
+  }
+</section>

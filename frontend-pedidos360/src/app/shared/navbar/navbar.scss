@@ -1,0 +1,67 @@
+.barra {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  padding: 0 24px;
+  height: 64px;
+  background: var(--tinta);
+  color: #fff;
+}
+.marca {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #fff;
+  text-decoration: none;
+  font-size: 1.15rem;
+  letter-spacing: -0.01em;
+  strong { color: var(--ambar); font-weight: 600; }
+  &__cubo {
+    width: 18px; height: 18px;
+    background: var(--ambar);
+    transform: rotate(45deg);
+    border-radius: 3px;
+  }
+}
+.enlaces {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+  a {
+    position: relative;
+    color: rgba(255, 255, 255, 0.78);
+    text-decoration: none;
+    padding: 8px 12px;
+    border-radius: 6px;
+    &:hover, &.activo { color: #fff; background: rgba(255, 255, 255, 0.1); }
+  }
+}
+.contador {
+  display: inline-block;
+  min-width: 20px;
+  margin-left: 6px;
+  padding: 0 6px;
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--tinta);
+  background: var(--ambar);
+  border-radius: 999px;
+}
+.sesion {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  &__estado { color: rgba(255,255,255,.7); font-size: .9rem; }
+  &__usuario { display: flex; flex-direction: column; line-height: 1.15; text-align: right; }
+  &__nombre { font-weight: 600; font-size: .95rem; }
+  &__rol { font-size: .78rem; color: var(--ambar); }
+}
+@media (max-width: 760px) {
+  .barra { gap: 12px; height: auto; flex-wrap: wrap; padding: 10px 16px; }
+  .enlaces { order: 3; width: 100%; overflow-x: auto; }
+  .sesion { margin-left: auto; }
+}

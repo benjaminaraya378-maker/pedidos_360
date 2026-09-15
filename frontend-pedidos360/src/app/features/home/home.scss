@@ -1,0 +1,19 @@
+.portada {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  gap: 40px;
+  align-items: start;
+  padding: 24px 0 8px;
+  @media (max-width: 860px) { grid-template-columns: 1fr; }
+  h1 { font-size: clamp(1.7rem, 3.6vw, 2.6rem); margin-bottom: 16px; }
+  &__contexto { color: var(--ambar-oscuro); font-weight: 600; margin-bottom: 8px; }
+  &__texto { color: var(--tinta-suave); max-width: 56ch; margin-bottom: 20px; }
+}
+.claves {
+  margin: 0 0 12px;
+  display: grid;
+  gap: 6px;
+  div { display: grid; grid-template-columns: 170px 1fr; gap: 12px; padding: 6px 0; border-top: 1px solid var(--linea); }
+  dt { color: var(--tinta-suave); font-size: 0.85rem; }
+  dd { margin: 0; }
+}

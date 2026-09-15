@@ -1,0 +1,15 @@
+.producto {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 18px;
+  background: var(--superficie);
+  border: 1px solid var(--linea);
+  border-radius: var(--radio);
+  &--agotado { opacity: 0.65; }
+  h3 { margin: 0; }
+  &__categoria { font-size: 0.78rem; color: var(--ambar-oscuro); font-weight: 600; }
+  &__descripcion { color: var(--tinta-suave); font-size: 0.9rem; flex: 1; margin: 0 0 8px; }
+  &__pie { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+  &__precio { font-weight: 600; font-size: 1.1rem; font-variant-numeric: tabular-nums; }
+}

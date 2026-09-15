@@ -1,0 +1,33 @@
+# Dependencias y compilación
+/node_modules
+/dist
+/out-tsc
+/.angular
+/.nx
+
+# Entornos y credenciales locales (nunca subir IDs reales de tenant/API si el repo es público)
+/.env
+/.env.*
+
+# IDEs y sistema operativo
+/.idea
+/.vscode/*
+!/.vscode/extensions.json
+*.launch
+.settings/
+*.sublime-workspace
+.DS_Store
+Thumbs.db
+
+# Logs y caché
+npm-debug.log*
+yarn-error.log
+/.sass-cache
+/connect.lock
+/coverage
+/libpeerconnection.log
+testem.log
+/typings
+
+# Nota: src/environments/*.ts SÍ se versionan (los client IDs de una SPA no son secretos);
+# si el repositorio es público y prefieres ocultarlos, agrega aquí src/environments/environment*.ts

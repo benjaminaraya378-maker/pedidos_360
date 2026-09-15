@@ -1,0 +1,34 @@
+<header class="barra">
+  <a routerLink="/" class="marca" aria-label="Inicio">
+    <span class="marca__cubo" aria-hidden="true"></span>
+    <span>Pedidos<strong>360</strong></span>
+  </a>
+
+  <nav class="enlaces" aria-label="Principal">
+    <a routerLink="/productos" routerLinkActive="activo">Catálogo</a>
+    <a routerLink="/pedidos" routerLinkActive="activo">
+      Pedidos
+      @if (carrito.cantidadTotal() > 0) {
+        <span class="contador" aria-label="Productos en el carrito">{{ carrito.cantidadTotal() }}</span>
+      }
+    </a>
+    <a routerLink="/perfil" routerLinkActive="activo">Mi sesión</a>
+    @if (auth.isAdmin()) {
+      <a routerLink="/admin" routerLinkActive="activo">Administración</a>
+    }
+  </nav>
+
+  <div class="sesion">
+    @if (auth.interactionInProgress()) {
+      <span class="sesion__estado">Verificando sesión…</span>
+    } @else if (auth.isLoggedIn()) {
+      <span class="sesion__usuario">
+        <span class="sesion__nombre">{{ auth.displayName() }}</span>
+        <span class="sesion__rol">{{ auth.isAdmin() ? 'Administrador' : 'Cliente' }}</span>
+      </span>
+      <button type="button" class="boton boton--fantasma" (click)="auth.logout()">Cerrar sesión</button>
+    } @else {
+      <button type="button" class="boton" (click)="auth.login()">Iniciar sesión</button>
+    }
+  </div>
+</header>

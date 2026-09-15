@@ -1,0 +1,65 @@
+<div class="encabezado">
+  <div>
+    <h1>Catálogo</h1>
+    <p>Datos de ms-productos a través del API Gateway (<code>GET /api/productos</code>).</p>
+  </div>
+  <button type="button" class="boton boton--secundario" (click)="cargar()">Actualizar</button>
+</div>
+
+@if (mensaje()) { <div class="aviso aviso--exito" role="status">{{ mensaje() }}</div> }
+@if (error()) { <div class="aviso aviso--error" role="alert">{{ error() }}</div> }
+
+<div [class.dos-columnas]="auth.isAdmin()">
+  <section>
+    @if (cargando()) {
+      <p class="cargando">Cargando productos…</p>
+    } @else if (productos().length === 0) {
+      <div class="vacio">Aún no hay productos. Un usuario con rol Admin puede crearlos.</div>
+    } @else {
+      <div class="cuadricula">
+        @for (p of productos(); track p.id) {
+          <article class="producto" [class.producto--agotado]="p.stock === 0">
+            <span class="producto__categoria">{{ p.categoria }}</span>
+            <h3>{{ p.nombre }}</h3>
+            <p class="producto__descripcion">{{ p.descripcion }}</p>
+            <div class="producto__pie">
+              <span class="producto__precio">{{ p.precio | currency: 'CLP' : 'symbol-narrow' : '1.0-0' }}</span>
+              <span class="silencio">{{ p.stock === 0 ? 'Sin stock' : p.stock + ' disponibles' }}</span>
+            </div>
+            <button type="button" class="boton boton--pequeno" [disabled]="p.stock === 0" (click)="agregar(p)">Agregar al pedido</button>
+          </article>
+        }
+      </div>
+    }
+  </section>
+
+  @if (auth.isAdmin()) {
+    <aside class="tarjeta">
+      <h2>Nuevo producto</h2>
+      <p class="silencio">Solo el rol <strong>Admin</strong> puede crear productos.</p>
+      <div class="campo">
+        <label for="nombre">Nombre</label>
+        <input id="nombre" [ngModel]="form().nombre" (ngModelChange)="actualizarCampo('nombre', $event)" />
+      </div>
+      <div class="campo">
+        <label for="descripcion">Descripción</label>
+        <textarea id="descripcion" rows="2" [ngModel]="form().descripcion" (ngModelChange)="actualizarCampo('descripcion', $event)"></textarea>
+      </div>
+      <div class="campo">
+        <label for="categoria">Categoría</label>
+        <input id="categoria" [ngModel]="form().categoria" (ngModelChange)="actualizarCampo('categoria', $event)" />
+      </div>
+      <div class="fila">
+        <div class="campo">
+          <label for="precio">Precio (CLP)</label>
+          <input id="precio" type="number" min="0" [ngModel]="form().precio" (ngModelChange)="actualizarCampo('precio', +$event)" />
+        </div>
+        <div class="campo">
+          <label for="stock">Stock</label>
+          <input id="stock" type="number" min="0" [ngModel]="form().stock" (ngModelChange)="actualizarCampo('stock', +$event)" />
+        </div>
+      </div>
+      <button type="button" class="boton" [disabled]="guardando()" (click)="guardar()">Crear producto</button>
+    </aside>
+  }
+</div>
