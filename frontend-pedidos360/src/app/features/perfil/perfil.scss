@@ -1,0 +1,22 @@
+.resumen {
+  margin-bottom: 20px;
+  &__identidad { display: flex; gap: 16px; align-items: center; margin-bottom: 16px; h2 { margin: 0; } }
+  &__avatar {
+    width: 56px; height: 56px; border-radius: 50%;
+    display: grid; place-items: center;
+    background: var(--tinta); color: var(--ambar);
+    font-size: 1.5rem; font-weight: 600;
+  }
+}
+.claves {
+  margin: 0;
+  display: grid;
+  gap: 8px;
+  div { display: grid; grid-template-columns: 180px 1fr; gap: 12px; padding: 6px 0; border-top: 1px solid var(--linea); }
+  dt { color: var(--tinta-suave); font-size: 0.85rem; }
+  dd { margin: 0; word-break: break-all; }
+  &--compacta div { grid-template-columns: 140px 1fr; font-size: 0.85rem; }
+  @media (max-width: 600px) { div { grid-template-columns: 1fr; gap: 2px; } }
+}
+.dos-tokens { display: grid; gap: 20px; grid-template-columns: 1fr 1fr; margin-top: 20px; @media (max-width: 860px) { grid-template-columns: 1fr; } }
+details pre { margin-top: 6px; max-width: 420px; font-size: 0.75rem; }

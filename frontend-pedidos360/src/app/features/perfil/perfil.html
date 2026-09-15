@@ -1,0 +1,49 @@
+<div class="encabezado">
+  <div>
+    <h1>Mi sesión</h1>
+    <p>Tokens emitidos por el IDaaS para {{ auth.displayName() }}.</p>
+  </div>
+  <div class="fila">
+    <button type="button" class="boton boton--secundario" [disabled]="ocupado()" (click)="renovarToken()">Renovar access token</button>
+    <button type="button" class="boton boton--secundario" [disabled]="!auth.accessToken()" (click)="copiarToken()">Copiar access token</button>
+  </div>
+</div>
+
+@if (aviso()) { <div class="aviso aviso--info" role="status">{{ aviso() }}</div> }
+
+<section class="tarjeta resumen">
+  <div class="resumen__identidad">
+    <span class="resumen__avatar" aria-hidden="true">{{ auth.displayName().charAt(0).toUpperCase() }}</span>
+    <div>
+      <h2>{{ auth.displayName() }}</h2>
+      <p class="silencio">{{ auth.email() }}</p>
+      <div class="fila">
+        @for (r of auth.roles(); track r) { <span class="etiqueta etiqueta--rol">rol: {{ r }}</span> }
+        @if (auth.roles().length === 0) { <span class="etiqueta">sin app role (Cliente)</span> }
+        @for (s of auth.scopes(); track s) { <span class="etiqueta etiqueta--ok">scope: {{ s }}</span> }
+      </div>
+    </div>
+  </div>
+  <dl class="claves">
+    @for (c of claimsDestacados(); track c.nombre) {
+      <div><dt>{{ c.nombre }}</dt><dd class="mono">{{ c.valor || '—' }}</dd></div>
+    }
+  </dl>
+</section>
+
+<div class="dos-tokens">
+  <section class="tarjeta">
+    <h2>Claims del ID token</h2>
+    <p class="silencio">Emitido por el flujo de usuario del tenant (OpenID Connect).</p>
+    <dl class="claves claves--compacta">
+      @for (c of claimsId(); track c.clave) { <div><dt>{{ c.clave }}</dt><dd class="mono">{{ c.valor }}</dd></div> }
+    </dl>
+  </section>
+  <section class="tarjeta">
+    <h2>Claims del access token</h2>
+    <p class="silencio">Es el JWT que MsalInterceptor adjunta en cada llamada al API Gateway.</p>
+    <dl class="claves claves--compacta">
+      @for (c of claimsAccess(); track c.clave) { <div><dt>{{ c.clave }}</dt><dd class="mono">{{ c.valor }}</dd></div> }
+    </dl>
+  </section>
+</div>

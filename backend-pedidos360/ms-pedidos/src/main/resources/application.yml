@@ -1,0 +1,27 @@
+server:
+  port: ${SERVER_PORT:8082}
+
+spring:
+  application:
+    name: ms-pedidos
+  # Propiedades de conexión a la base de datos cloud (Amazon RDS MySQL)
+  datasource:
+    url: ${DB_URL:jdbc:mysql://REEMPLAZAR-ENDPOINT-RDS:3306/pedidos360_pedidos?createDatabaseIfNotExist=true&serverTimezone=UTC}
+    username: ${DB_USER:admin}
+    password: ${DB_PASSWORD:REEMPLAZAR-PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: ${DB_DDL_AUTO:update}
+    open-in-view: false
+
+pedidos360:
+  security:
+    # Valores del IDaaS (copiar desde un token decodificado en https://jwt.ms)
+    issuer: ${JWT_ISSUER:https://REEMPLAZAR-TENANT-ID.ciamlogin.com/REEMPLAZAR-TENANT-ID/v2.0}
+    jwk-set-uri: ${JWT_JWKS_URI:https://REEMPLAZAR-SUBDOMINIO.ciamlogin.com/REEMPLAZAR-TENANT-ID/discovery/v2.0/keys}
+    audiences: ${JWT_AUDIENCE:REEMPLAZAR-CLIENT-ID-API}
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200}
+    roles-claim: ${JWT_ROLES_CLAIM:roles}
+  clients:
+    # URL interna de ms-productos (en EC2: http://localhost:8081)
+    productos-url: ${PRODUCTOS_URL:http://localhost:8081}
