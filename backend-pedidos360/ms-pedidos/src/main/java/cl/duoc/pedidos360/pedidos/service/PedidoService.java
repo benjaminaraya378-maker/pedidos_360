@@ -6,6 +6,7 @@ import cl.duoc.pedidos360.pedidos.client.ProductoDto;
 import cl.duoc.pedidos360.pedidos.client.ProductosClient;
 import cl.duoc.pedidos360.pedidos.dto.CrearPedidoRequest;
 import cl.duoc.pedidos360.pedidos.dto.PedidoResponse;
+import cl.duoc.pedidos360.pedidos.event.PedidoCreadoEvent;
 import cl.duoc.pedidos360.pedidos.model.Pedido;
 import cl.duoc.pedidos360.pedidos.model.PedidoItem;
 import cl.duoc.pedidos360.pedidos.repository.PedidoRepository;
@@ -15,6 +16,7 @@ import java.math.BigDecimal;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
@@ -29,16 +31,20 @@ public class PedidoService {
   private final PedidoRepository repository;
   private final ProductosClient productosClient;
   private final SecurityProperties securityProps;
+  private final ApplicationEventPublisher eventos;
 
-  public PedidoService(PedidoRepository repository, ProductosClient productosClient, SecurityProperties securityProps) {
+  public PedidoService(PedidoRepository repository, ProductosClient productosClient, SecurityProperties securityProps,
+                       ApplicationEventPublisher eventos) {
     this.repository = repository;
     this.productosClient = productosClient;
     this.securityProps = securityProps;
+    this.eventos = eventos;
   }
 
   /**
    * Crea un pedido para el usuario del token: valida cada producto contra ms-productos,
-   * calcula el total con el precio vigente.
+   * calcula el total con el precio vigente. Al confirmarse la transacción, PedidoEventProducer
+   * publica el evento en RabbitMQ (notificación y comprobante se procesan de forma asíncrona).
    */
   public PedidoResponse crear(Jwt jwt, CrearPedidoRequest req) {
     Pedido pedido = new Pedido();
@@ -71,6 +77,7 @@ public class PedidoService {
     Pedido guardado = repository.save(pedido);
     log.info("Pedido {} creado por {} ({} ítems, total {})", guardado.getId(), pedido.getClienteEmail(),
         pedido.getItems().size(), total);
+    eventos.publishEvent(PedidoCreadoEvent.de(guardado));
     return PedidoResponse.de(guardado);
   }
 

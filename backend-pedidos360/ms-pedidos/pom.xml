@@ -42,6 +42,12 @@
       <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
     </dependency>
 
+    <!-- Mensajería: RabbitMQ (productor de eventos de pedidos y consumidores de tareas asíncronas) -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-amqp</artifactId>
+    </dependency>
+
     <!-- Observabilidad (health check para EC2 / API Gateway) -->
 
     <!-- Persistencia: JPA + MySQL (RDS) en la nube, H2 en memoria para desarrollo local -->

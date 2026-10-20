@@ -13,6 +13,20 @@ spring:
     hibernate:
       ddl-auto: ${DB_DDL_AUTO:update}
     open-in-view: false
+  # Conexión al broker RabbitMQ
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    virtual-host: ${RABBITMQ_VHOST:/}
+    # Si el broker no responde, la creación del pedido no queda esperando más de esto
+    connection-timeout: 5s
+    listener:
+      simple:
+        # Cada consumidor confirma con basicAck / basicNack de forma explícita
+        acknowledge-mode: manual
+        prefetch: 10
 
 pedidos360:
   security:
@@ -25,3 +39,20 @@ pedidos360:
   clients:
     # URL interna de ms-productos (en EC2: http://localhost:8081)
     productos-url: ${PRODUCTOS_URL:http://localhost:8081}
+  # Nombres de exchanges, colas, DLQ y bindings: se definen SOLO aquí y los usa RabbitMQConfig
+  messaging:
+    exchange: pedidos360.pedidos.exchange          # topic: eventos del dominio pedidos
+    dead-letter-exchange: pedidos360.pedidos.dlx   # direct: recibe los mensajes rechazados por los consumidores
+    pedido-creado-routing-key: pedido.creado       # routing key con la que se publica cada pedido nuevo
+    max-reintentos: 3                              # reintentos ante errores recuperables antes de ir a la DLQ
+    notificaciones:                                # caso de uso 1: avisar al cliente que su pedido fue recibido
+      cola: pedidos360.notificaciones.queue
+      binding-key: pedido.creado
+      dlq: pedidos360.notificaciones.dlq
+    comprobantes:                                  # caso de uso 2: generar el comprobante (ticket) del pedido
+      cola: pedidos360.comprobantes.queue
+      binding-key: pedido.creado
+      dlq: pedidos360.comprobantes.dlq
+  comprobantes:
+    # Carpeta donde se escriben los tickets generados por el consumidor de comprobantes
+    directorio: ${COMPROBANTES_DIR:${java.io.tmpdir}/pedidos360-comprobantes}
