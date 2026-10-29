@@ -1,0 +1,56 @@
+# Clúster RabbitMQ de 2 nodos para Pedidos360 (EP4).
+#   docker compose up -d
+#   docker compose ps                                  # ambos servicios en estado healthy
+#   docker exec rabbitmq1 rabbitmqctl cluster_status   # debe listar rabbit@rabbitmq1 y rabbit@rabbitmq2
+#
+# Los dos nodos comparten la cookie de Erlang y el mismo rabbitmq.conf (peer discovery classic_config), así el
+# nodo 2 se une solo al clúster del nodo 1. Los puertos se publican solo en 127.0.0.1: los microservicios corren
+# en la misma EC2 y la consola se abre por túnel SSH (ssh -L 15672:localhost:15672 ...).
+#
+# Microservicios: RABBITMQ_ADDRESSES=localhost:5672,localhost:5673
+name: pedidos360
+
+x-rabbitmq: &rabbitmq
+  image: rabbitmq:3.13-management
+  restart: unless-stopped
+  environment:
+    # Cambiar la cookie y las credenciales en el despliegue real (variables de entorno o archivo .env)
+    RABBITMQ_ERLANG_COOKIE: ${RABBITMQ_ERLANG_COOKIE:-pedidos360-cookie-del-cluster}
+    RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+    RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+  healthcheck:
+    test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+    interval: 10s
+    timeout: 10s
+    retries: 12
+    start_period: 20s
+
+services:
+  rabbitmq1:
+    <<: *rabbitmq
+    container_name: rabbitmq1
+    hostname: rabbitmq1
+    ports:
+      - "127.0.0.1:5672:5672"     # AMQP
+      - "127.0.0.1:15672:15672"   # consola de administración
+    volumes:
+      - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/conf.d/20-cluster.conf:ro
+      - rabbitmq1-data:/var/lib/rabbitmq
+
+  rabbitmq2:
+    <<: *rabbitmq
+    container_name: rabbitmq2
+    hostname: rabbitmq2
+    depends_on:
+      rabbitmq1:
+        condition: service_healthy   # espera a que el nodo 1 responda antes de unirse
+    ports:
+      - "127.0.0.1:5673:5672"     # AMQP (puerto 5672 del contenedor)
+      - "127.0.0.1:15673:15672"   # consola de administración
+    volumes:
+      - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/conf.d/20-cluster.conf:ro
+      - rabbitmq2-data:/var/lib/rabbitmq
+
+volumes:
+  rabbitmq1-data:
+  rabbitmq2-data:

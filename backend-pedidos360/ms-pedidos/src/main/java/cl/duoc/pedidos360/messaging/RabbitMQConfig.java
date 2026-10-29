@@ -25,6 +25,10 @@ import org.springframework.context.annotation.Configuration;
  *   2. Comprobante (ticket) del pedido
  *      exchange (topic) --[comprobantes.binding-key]--> comprobantes.cola
  *      rechazados: dead-letter-exchange (direct) --[comprobantes.dlq]--> comprobantes.dlq
+ *
+ *   3. Auditoría del pedido
+ *      exchange (topic) --[auditoria.binding-key]--> auditoria.cola
+ *      rechazados: dead-letter-exchange (direct) --[auditoria.dlq]--> auditoria.dlq
  * </pre>
  * Cada cola principal declara {@code x-dead-letter-exchange} y {@code x-dead-letter-routing-key}: cuando un
  * consumidor hace NACK sin requeue, el broker reenvía el mensaje a la DLQ de esa misma cola.
@@ -98,6 +102,30 @@ public class RabbitMQConfig {
   Binding comprobantesDlqBinding() {
     return BindingBuilder.bind(comprobantesDlq()).to(deadLetterExchange())
         .with(props.comprobantes().dlq());
+  }
+
+  // ---------- Caso de uso 3: auditoría ----------
+
+  @Bean
+  Queue auditoriaQueue() {
+    return colaConDlq(props.auditoria());
+  }
+
+  @Bean
+  Queue auditoriaDlq() {
+    return QueueBuilder.durable(props.auditoria().dlq()).build();
+  }
+
+  @Bean
+  Binding auditoriaBinding() {
+    return BindingBuilder.bind(auditoriaQueue()).to(pedidosExchange())
+        .with(props.auditoria().bindingKey());
+  }
+
+  @Bean
+  Binding auditoriaDlqBinding() {
+    return BindingBuilder.bind(auditoriaDlq()).to(deadLetterExchange())
+        .with(props.auditoria().dlq());
   }
 
   // ---------- Serialización ----------

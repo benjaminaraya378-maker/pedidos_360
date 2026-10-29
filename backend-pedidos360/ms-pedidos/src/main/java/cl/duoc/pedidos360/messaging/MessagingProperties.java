@@ -11,7 +11,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *   <li>deadLetterExchange: exchange direct al que el broker envía los mensajes rechazados (NACK sin requeue).</li>
  *   <li>pedidoCreadoRoutingKey: routing key del evento "pedido creado".</li>
  *   <li>maxReintentos: reintentos ante errores recuperables antes de mandar el mensaje a la DLQ.</li>
- *   <li>notificaciones / comprobantes: cola, binding key y DLQ de cada caso de uso.</li>
+ *   <li>notificaciones / comprobantes / auditoria: cola, binding key y DLQ de cada caso de uso.</li>
  * </ul>
  */
 @ConfigurationProperties(prefix = "pedidos360.messaging")
@@ -21,7 +21,8 @@ public record MessagingProperties(
     String pedidoCreadoRoutingKey,
     int maxReintentos,
     Ruta notificaciones,
-    Ruta comprobantes) {
+    Ruta comprobantes,
+    Ruta auditoria) {
 
   /** Una ruta de mensajería: la cola que consume, su binding sobre el exchange y su DLQ. */
   public record Ruta(String cola, String bindingKey, String dlq) {}

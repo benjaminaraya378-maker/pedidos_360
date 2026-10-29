@@ -1,6 +1,6 @@
 # Pedidos360 · Backend (Spring Boot 3.5 · Java 21)
 
-Tres microservicios Spring Boot. Cada uno **valida el JWT del IDaaS** (firma vía JWKS, vigencia, issuer, audience)
+Cuatro microservicios Spring Boot. Cada uno **valida el JWT del IDaaS** (firma vía JWKS, vigencia, issuer, audience)
 con Spring Security OAuth2 Resource Server y autoriza por **rol** (claim `roles` → `ROLE_*`) y **scope**
 (claim `scp` → `SCOPE_*`). Se despliegan en **EC2** y persisten en una base de datos cloud (**RDS MySQL**).
 
@@ -28,12 +28,13 @@ Paquetes comunes (`cl.duoc.pedidos360.security`, `cl.duoc.pedidos360.common`): `
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:4200,https://<url-del-frontend>` |
 | `DB_URL`, `DB_USER`, `DB_PASSWORD` | conexión a RDS MySQL (una por microservicio; ver `application.yml`) |
 | `PRODUCTOS_URL`, `PEDIDOS_URL` | URLs internas entre servicios (en EC2: `http://localhost:8081` / `8082`) |
-| `RABBITMQ_HOST`, `RABBITMQ_PORT`, `RABBITMQ_USER`, `RABBITMQ_PASSWORD`, `RABBITMQ_VHOST` | broker RabbitMQ (`ms-pedidos` y `ms-rabbitmq-admin`; por defecto `localhost:5672`, `guest`) |
+| `RABBITMQ_ADDRESSES` | nodos del clúster RabbitMQ (`ms-pedidos` y `ms-rabbitmq-admin`): `localhost:5672,localhost:5673`. Sin definir, se usa un solo broker (`RABBITMQ_HOST`:`RABBITMQ_PORT`) |
+| `RABBITMQ_HOST`, `RABBITMQ_PORT`, `RABBITMQ_USER`, `RABBITMQ_PASSWORD`, `RABBITMQ_VHOST` | un solo broker y credenciales (por defecto `localhost:5672`, `guest`) |
 | `COMPROBANTES_DIR` | carpeta donde `ms-pedidos` escribe los tickets (por defecto la carpeta temporal del sistema) |
 
 ## Mensajería con RabbitMQ
 
-`ms-pedidos` publica un evento cuando se crea un pedido y lo procesan, de forma asíncrona, dos consumidores. La creación
+`ms-pedidos` publica un evento cuando se crea un pedido y lo procesan, de forma asíncrona, tres consumidores. La creación
 del pedido no depende del broker: el evento se publica después del commit y, si RabbitMQ no responde, el pedido igual
 se crea y el fallo queda en el log.
 
@@ -44,6 +45,7 @@ declaran en `messaging/RabbitMQConfig`.
 |---|---|---|---|
 | Notificar al cliente | `pedidos360.pedidos.exchange` (topic) → `pedidos360.notificaciones.queue` (`pedido.creado`) | `pedidos360.notificaciones.dlq` | `notificaciones/consumer/NotificacionPedidoConsumer` |
 | Generar el comprobante (ticket) | `pedidos360.pedidos.exchange` (topic) → `pedidos360.comprobantes.queue` (`pedido.creado`) | `pedidos360.comprobantes.dlq` | `comprobantes/consumer/ComprobantePedidoConsumer` |
+| Registrar la auditoría | `pedidos360.pedidos.exchange` (topic) → `pedidos360.auditoria.queue` (`pedido.creado`) | `pedidos360.auditoria.dlq` | `auditoria/consumer/AuditoriaPedidoConsumer` |
 
 Cada cola principal tiene `x-dead-letter-exchange = pedidos360.pedidos.dlx` (direct), que enruta los rechazados a su DLQ.
 Los consumidores usan ACK manual y la misma política de error (`messaging/ConsumerErrorHandler`):
@@ -55,6 +57,24 @@ Los consumidores usan ACK manual y la misma política de error (`messaging/Consu
 | Error recuperable (p. ej. no se pudo escribir el ticket) | se reintenta hasta `max-reintentos` (3) con el header `x-reintentos` |
 | Reintentos agotados | `basicNack` sin requeue → DLQ, y se registra en el log |
 | No se pudo publicar el reintento | `basicNack` con requeue (el mensaje no se pierde) |
+
+### Clúster RabbitMQ de dos nodos (docker-compose)
+
+`docker-compose.yml` levanta **`rabbitmq1`** (AMQP `5672`, consola `15672`) y **`rabbitmq2`** (AMQP `5673`, consola `15673`) con
+RabbitMQ 3.13. Comparten la cookie de Erlang y `rabbitmq/rabbitmq.conf` (peer discovery `classic_config`), y el nodo 2 espera
+a que el nodo 1 esté `healthy`. Los puertos se publican solo en `127.0.0.1`; la consola se abre por túnel SSH.
+
+```bash
+docker compose up -d
+docker compose ps                                  # rabbitmq1 y rabbitmq2 en estado healthy
+docker exec rabbitmq1 rabbitmqctl cluster_status   # debe listar rabbit@rabbitmq1 y rabbit@rabbitmq2
+export RABBITMQ_ADDRESSES=localhost:5672,localhost:5673   # y reiniciar ms-pedidos y ms-rabbitmq-admin
+bash rabbitmq/ha-policy.sh                         # opcional: replica las colas pedidos360.* en los dos nodos
+bash rabbitmq/verificar-ep4.sh                     # comprueba clúster, exchanges, colas, bindings y el flujo de un pedido
+```
+
+Las colas son clásicas: cada una vive en el nodo donde se declaró, salvo que se aplique `ha-policy.sh`. Con dos nodos no hay
+quórum ante una partición de red.
 
 ### API del administrador de RabbitMQ (`ms-rabbitmq-admin`, rol Admin)
 
@@ -77,18 +97,19 @@ La lógica está en `rabbitadmin/service/RabbitAdminService`; el controlador sol
 
 ```bash
 # Amazon Linux 2023: sudo dnf install -y java-21-amazon-corretto maven git docker
-sudo docker run -d --name rabbitmq --restart unless-stopped -p 5672:5672 -p 15672:15672 rabbitmq:3.13-management
+sudo docker rm -f rabbitmq 2>/dev/null; sudo docker compose up -d   # clúster RabbitMQ de 2 nodos (ver arriba)
+export RABBITMQ_ADDRESSES=localhost:5672,localhost:5673
 mvn -f ms-productos/pom.xml      -DskipTests package && nohup java -jar ms-productos/target/ms-productos-1.0.0.jar &
 mvn -f ms-pedidos/pom.xml        -DskipTests package && nohup java -jar ms-pedidos/target/ms-pedidos-1.0.0.jar &
 mvn -f bff-pedidos360/pom.xml    -DskipTests package && nohup java -jar bff-pedidos360/target/bff-pedidos360-1.0.0.jar &
 mvn -f ms-rabbitmq-admin/pom.xml -DskipTests package && nohup java -jar ms-rabbitmq-admin/target/ms-rabbitmq-admin-1.0.0.jar &
 ```
 Exportar antes las variables de la tabla. Security group de la EC2: puertos 8080-8083 abiertos para el API Gateway.
-La consola de RabbitMQ (`:15672`) muestra las colas y DLQ; no se abre al público.
+La consola de RabbitMQ (`:15672` y `:15673`) muestra los nodos, colas y DLQ; no se abre al público.
 
 ## API Gateway (HTTP API) — rutas, authorizer y CORS
 
-Integraciones HTTP hacia `http://<ip-ec2>:8080|8081|8082` y rutas explícitas:
+Integraciones HTTP hacia `http://<ip-ec2>:8080|8081|8082|8083` y rutas explícitas:
 
 | Método | Ruta | Backend | Scope en el authorizer |
 |---|---|---|---|
@@ -99,7 +120,7 @@ Integraciones HTTP hacia `http://<ip-ec2>:8080|8081|8082` y rutas explícitas:
 | GET | `/api/productos/{id}` | 8081 | `Pedidos360.Read` |
 | GET / POST | `/api/pedidos` | 8082 | `Pedidos360.Read` / `Pedidos360.Write` |
 | GET | `/api/pedidos/{id}` | 8082 | `Pedidos360.Read` |
-| POST / GET / DELETE | `/api/rabbit/{proxy+}` | 8083 | (el rol Admin lo valida el servicio) |
+| ANY | `/api/rabbit/{proxy+}` | 8083 | (el rol Admin lo valida el servicio) |
 
 - **Authorizer JWT**: identity source `$request.header.Authorization`, issuer = `JWT_ISSUER`, audience = `JWT_AUDIENCE`;
   adjunto a todas las rutas. Sin token / token inválido → 401; sin el scope → 403.
