@@ -5,12 +5,14 @@ import cl.duoc.pedidos360.rabbitadmin.dto.BindingResponse;
 import cl.duoc.pedidos360.rabbitadmin.dto.ExchangeRequest;
 import cl.duoc.pedidos360.rabbitadmin.dto.ExchangeResponse;
 import cl.duoc.pedidos360.rabbitadmin.dto.QueueRequest;
+import cl.duoc.pedidos360.rabbitadmin.dto.PurgaResponse;
 import cl.duoc.pedidos360.rabbitadmin.dto.QueueResponse;
 import cl.duoc.pedidos360.rabbitadmin.dto.ReglasNombre;
 import cl.duoc.pedidos360.rabbitadmin.service.RabbitAdminService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
 import java.net.URI;
+import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -26,8 +28,10 @@ import org.springframework.web.bind.annotation.RestController;
  * API REST del administrador de RabbitMQ. Todas las rutas exigen JWT válido con rol Admin.
  * <pre>
  *   POST   /api/rabbit/queues                                  crea una cola              201 · 400 · 409
- *   GET    /api/rabbit/queues/{nombre}                         mensajes y consumidores    200 · 404
- *   DELETE /api/rabbit/queues/{nombre}                         elimina la cola            204 · 404
+ *   GET    /api/rabbit/queues                                  lista las colas            200 · 503
+ *   GET    /api/rabbit/queues/{nombre}                         mensajes y consumidores    200 · 400 · 404
+ *   DELETE /api/rabbit/queues/{nombre}                         elimina la cola            204 · 400 · 404
+ *   DELETE /api/rabbit/queues/{nombre}/messages                vacía la cola (purga)      200 · 400 · 404
  *   POST   /api/rabbit/exchanges                               crea un exchange           201 · 400 · 409
  *   DELETE /api/rabbit/exchanges/{nombre}                      elimina el exchange        204 · 404
  *   POST   /api/rabbit/bindings                                enlaza cola y exchange     201 · 400 · 404
@@ -54,6 +58,11 @@ public class RabbitAdminController {
     return ResponseEntity.created(URI.create("/api/rabbit/queues/" + creada.nombre())).body(creada);
   }
 
+  @GetMapping("/queues")
+  public List<QueueResponse> listarColas() {
+    return service.listarColas();
+  }
+
   @GetMapping("/queues/{nombre}")
   public QueueResponse obtenerCola(
       @PathVariable @Pattern(regexp = ReglasNombre.PATRON, message = ReglasNombre.MENSAJE) String nombre) {
@@ -65,6 +74,13 @@ public class RabbitAdminController {
       @PathVariable @Pattern(regexp = ReglasNombre.PATRON, message = ReglasNombre.MENSAJE) String nombre) {
     service.eliminarCola(nombre);
     return ResponseEntity.noContent().build();
+  }
+
+  /** Elimina los mensajes de la cola pero deja la cola y sus bindings. */
+  @DeleteMapping("/queues/{nombre}/messages")
+  public PurgaResponse vaciarCola(
+      @PathVariable @Pattern(regexp = ReglasNombre.PATRON, message = ReglasNombre.MENSAJE) String nombre) {
+    return service.vaciarCola(nombre);
   }
 
   // ---------- Exchanges ----------

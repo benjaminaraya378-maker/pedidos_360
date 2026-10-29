@@ -19,8 +19,9 @@ import org.springframework.stereotype.Component;
  *   <li><b>Error no recuperable</b> — JSON ilegible ({@link JsonProcessingException}) o datos inválidos
  *       ({@link IllegalArgumentException}). Reintentar no lo arregla: NACK sin requeue y el broker lo
  *       envía a la DLQ de la cola.</li>
- *   <li><b>Error recuperable</b> — cualquier otro (p. ej. I/O). Se reintenta: se publica una copia en la
- *       misma cola con el header {@value #HEADER_REINTENTOS} incrementado y se hace ACK del original.</li>
+ *   <li><b>Error recuperable</b> — cualquier otro (p. ej. I/O). Se reintenta: tras una espera creciente
+ *       ({@code retry-delay-ms} por el número de intento, para dar tiempo a que el problema pase) se publica una
+ *       copia en la misma cola con el header {@value #HEADER_REINTENTOS} incrementado y se hace ACK del original.</li>
  *   <li><b>Reintentos agotados</b> ({@code max-reintentos}) — NACK sin requeue → DLQ.</li>
  *   <li><b>No se pudo publicar el reintento</b> (broker con problemas) — NACK con requeue, para no perder
  *       el mensaje.</li>
@@ -60,15 +61,26 @@ public class ConsumerErrorHandler {
     }
 
     try {
+      esperar(props.retryDelayMs() * (reintentos + 1));
       mp.setHeader(HEADER_REINTENTOS, reintentos + 1);
       mp.setDeliveryMode(MessageDeliveryMode.PERSISTENT);
       // Exchange por defecto ("") con la cola como routing key: la copia vuelve solo a esta cola
       rabbitTemplate.send("", cola, message);
       channel.basicAck(tag, false);
       log.warn("Reintento {}/{} del mensaje en '{}' ({})", reintentos + 1, props.maxReintentos(), cola, causa);
+    } catch (InterruptedException ex) {
+      // La aplicación se está deteniendo: el mensaje no se pierde, vuelve a la cola
+      Thread.currentThread().interrupt();
+      channel.basicNack(tag, false, true);
     } catch (AmqpException ex) {
       log.error("No se pudo programar el reintento en '{}'; el mensaje vuelve a la cola", cola, ex);
       channel.basicNack(tag, false, true);
+    }
+  }
+
+  private static void esperar(long millis) throws InterruptedException {
+    if (millis > 0) {
+      Thread.sleep(millis);
     }
   }
 

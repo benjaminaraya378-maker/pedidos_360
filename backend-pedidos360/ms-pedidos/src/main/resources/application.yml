@@ -47,6 +47,7 @@ pedidos360:
     dead-letter-exchange: pedidos360.pedidos.dlx   # direct: recibe los mensajes rechazados por los consumidores
     pedido-creado-routing-key: pedido.creado       # routing key con la que se publica cada pedido nuevo
     max-reintentos: 3                              # reintentos ante errores recuperables antes de ir a la DLQ
+    retry-delay-ms: 1000                           # espera antes de cada reintento: intento N espera N x este valor (ms)
     notificaciones:                                # caso de uso 1: avisar al cliente que su pedido fue recibido
       cola: pedidos360.notificaciones.queue
       binding-key: pedido.creado

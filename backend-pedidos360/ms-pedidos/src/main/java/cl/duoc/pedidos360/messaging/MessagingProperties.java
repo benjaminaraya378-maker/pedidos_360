@@ -11,6 +11,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *   <li>deadLetterExchange: exchange direct al que el broker envía los mensajes rechazados (NACK sin requeue).</li>
  *   <li>pedidoCreadoRoutingKey: routing key del evento "pedido creado".</li>
  *   <li>maxReintentos: reintentos ante errores recuperables antes de mandar el mensaje a la DLQ.</li>
+ *   <li>retryDelayMs: espera base antes de cada reintento; el intento N espera N veces este valor (0 = sin espera).</li>
  *   <li>notificaciones / comprobantes / auditoria: cola, binding key y DLQ de cada caso de uso.</li>
  * </ul>
  */
@@ -20,6 +21,7 @@ public record MessagingProperties(
     String deadLetterExchange,
     String pedidoCreadoRoutingKey,
     int maxReintentos,
+    long retryDelayMs,
     Ruta notificaciones,
     Ruta comprobantes,
     Ruta auditoria) {

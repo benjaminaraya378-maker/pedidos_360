@@ -16,6 +16,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 
 /** Traduce excepciones a respuestas JSON coherentes (400, 403, 404, 409, 502, 503, 500). */
@@ -75,6 +76,13 @@ public class GlobalExceptionHandler {
     }
     log.error("RabbitMQ rechazó {} {}", req.getMethod(), req.getRequestURI(), ex);
     return build(HttpStatus.BAD_GATEWAY, "RabbitMQ rechazó la operación: " + motivo(ex), req, List.of());
+  }
+
+  /** La API de gestión de RabbitMQ (solo para listar colas) no responde o rechazó las credenciales → 503. */
+  @ExceptionHandler(RestClientException.class)
+  public ResponseEntity<ApiError> gestion(RestClientException ex, HttpServletRequest req) {
+    log.error("API de gestión de RabbitMQ no disponible: {}", ex.getMessage());
+    return build(HttpStatus.SERVICE_UNAVAILABLE, "La API de gestión de RabbitMQ no está disponible", req, List.of());
   }
 
   /** Conexión rechazada (broker apagado) o cortada (cierre a nivel de conexión, no de canal). */

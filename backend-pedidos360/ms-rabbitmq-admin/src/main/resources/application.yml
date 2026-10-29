@@ -16,6 +16,9 @@ spring:
     connection-timeout: 5s
 
 pedidos360:
+  rabbit-admin:
+    # API de gestión de RabbitMQ (la consola web), solo para listar colas. Con el docker-compose: nodo 1 en 15672, nodo 2 en 15673
+    management-url: ${RABBITMQ_MANAGEMENT_URL:http://localhost:15672}
   security:
     # Valores del IDaaS (copiar desde un token decodificado en https://jwt.ms)
     issuer: ${JWT_ISSUER:https://REEMPLAZAR-TENANT-ID.ciamlogin.com/REEMPLAZAR-TENANT-ID/v2.0}

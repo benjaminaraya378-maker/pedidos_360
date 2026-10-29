@@ -2,13 +2,16 @@ package cl.duoc.pedidos360.rabbitadmin.service;
 
 import cl.duoc.pedidos360.common.BusinessException;
 import cl.duoc.pedidos360.common.ResourceNotFoundException;
+import cl.duoc.pedidos360.rabbitadmin.client.RabbitManagementClient;
 import cl.duoc.pedidos360.rabbitadmin.dto.BindingRequest;
 import cl.duoc.pedidos360.rabbitadmin.dto.BindingResponse;
 import cl.duoc.pedidos360.rabbitadmin.dto.ExchangeRequest;
 import cl.duoc.pedidos360.rabbitadmin.dto.ExchangeResponse;
+import cl.duoc.pedidos360.rabbitadmin.dto.PurgaResponse;
 import cl.duoc.pedidos360.rabbitadmin.dto.QueueRequest;
 import cl.duoc.pedidos360.rabbitadmin.dto.QueueResponse;
 import java.io.IOException;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.AmqpAdmin;
@@ -22,7 +25,8 @@ import org.springframework.stereotype.Service;
 
 /**
  * Administración de RabbitMQ: toda la interacción con el broker (RabbitAdmin) está en esta clase; el
- * controlador solo llama a sus métodos y no conoce la librería AMQP.
+ * controlador solo llama a sus métodos y no conoce la librería AMQP. El único dato que AMQP no entrega, el
+ * listado de colas, lo pide al {@link RabbitManagementClient}.
  *
  * <p>Antes de cada operación se revisa el estado real del broker: no se crea lo que ya existe (409),
  * no se elimina ni se enlaza lo que no existe (404) y no se acepta un dead-letter exchange inexistente (400).
@@ -34,10 +38,12 @@ public class RabbitAdminService {
 
   private final AmqpAdmin amqpAdmin;
   private final RabbitTemplate rabbitTemplate;
+  private final RabbitManagementClient management;
 
-  public RabbitAdminService(AmqpAdmin amqpAdmin, RabbitTemplate rabbitTemplate) {
+  public RabbitAdminService(AmqpAdmin amqpAdmin, RabbitTemplate rabbitTemplate, RabbitManagementClient management) {
     this.amqpAdmin = amqpAdmin;
     this.rabbitTemplate = rabbitTemplate;
+    this.management = management;
   }
 
   // ---------- Colas ----------
@@ -62,6 +68,10 @@ public class RabbitAdminService {
     return obtenerCola(req.nombre());
   }
 
+  public List<QueueResponse> listarColas() {
+    return management.colas();
+  }
+
   public QueueResponse obtenerCola(String nombre) {
     QueueInformation info = amqpAdmin.getQueueInfo(nombre);
     if (info == null) {
@@ -76,6 +86,16 @@ public class RabbitAdminService {
     }
     amqpAdmin.deleteQueue(nombre);
     log.info("Cola '{}' eliminada", nombre);
+  }
+
+  /** Elimina los mensajes de la cola; la cola y sus bindings se mantienen. */
+  public PurgaResponse vaciarCola(String nombre) {
+    if (!existeCola(nombre)) {
+      throw new ResourceNotFoundException("La cola '" + nombre + "' no existe");
+    }
+    int eliminados = amqpAdmin.purgeQueue(nombre);
+    log.info("Cola '{}' vaciada: {} mensaje(s) eliminado(s)", nombre, eliminados);
+    return new PurgaResponse(nombre, eliminados);
   }
 
   // ---------- Exchanges ----------

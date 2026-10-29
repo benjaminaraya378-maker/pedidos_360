@@ -9,13 +9,18 @@ levantando RabbitMQ en la nube. La lógica de negocio no cambia: el único códi
 |---|---|
 | `ms-pedidos/.../auditoria/consumer/AuditoriaPedidoConsumer` | `@RabbitListener` de la cola de auditoría; ACK manual y errores por `ConsumerErrorHandler` |
 | `ms-pedidos/.../auditoria/service/AuditoriaService` | registra en el log una línea `AUDITORIA` por pedido (id, cliente, ítems, total, fecha); un evento sin id es error no recuperable |
-| `ms-pedidos/.../messaging/MessagingProperties` | nueva ruta `auditoria` |
+| `ms-pedidos/.../messaging/MessagingProperties` | nueva ruta `auditoria` y `retryDelayMs` |
+| `ms-pedidos/.../messaging/ConsumerErrorHandler` | espera `retry-delay-ms` x N antes del reintento N (y NACK con requeue si se interrumpe) |
 | `ms-pedidos/.../messaging/RabbitMQConfig` | beans de `pedidos360.auditoria.queue`, `pedidos360.auditoria.dlq` y sus 2 bindings; Javadoc con las 3 rutas |
 | `ms-pedidos/.../application.yml` | `pedidos360.messaging.auditoria` y `spring.rabbitmq.addresses` (`RABBITMQ_ADDRESSES`) |
-| `ms-rabbitmq-admin/.../application.yml` | `spring.rabbitmq.addresses` (`RABBITMQ_ADDRESSES`) |
+| `ms-rabbitmq-admin/.../application.yml` | `spring.rabbitmq.addresses` (`RABBITMQ_ADDRESSES`) y `pedidos360.rabbit-admin.management-url` (`RABBITMQ_MANAGEMENT_URL`) |
+| `ms-rabbitmq-admin/.../RabbitAdminController` y `RabbitAdminService` | `GET /api/rabbit/queues` (listar) y `DELETE /api/rabbit/queues/{nombre}/messages` (vaciar) |
+| `ms-rabbitmq-admin/.../client/RabbitManagementClient` | pide el listado a la API de gestión de RabbitMQ (AMQP no lista colas); sin respuesta → 503 |
+| `ms-rabbitmq-admin/.../dto/PurgaResponse` | `{nombre, mensajesEliminados}` |
 
-`ConsumerErrorHandler` no cambia: usa la cola del propio mensaje (`getConsumerQueue()`) y `max-reintentos`, sin lógica por
-cola, así que sirve igual para auditoría.
+`ConsumerErrorHandler` sigue sin lógica por cola (usa la cola del propio mensaje, `getConsumerQueue()`), así que sirve igual
+para auditoría. Se le agregó una espera creciente antes de cada reintento (`retry-delay-ms` x N: 1 s, 2 s y 3 s), para que un
+error pasajero tenga tiempo de resolverse antes de agotar los 3 reintentos.
 
 ## Infraestructura nueva
 
@@ -55,6 +60,12 @@ el mismo authorizer JWT.
 - Un evento `pedido.creado` válido publicado en el exchange deja en el log la notificación, el comprobante y `AUDITORIA`; un
   mensaje ilegible va a las tres DLQ (en `pedidos360.auditoria.dlq` con `x-death`, motivo `rejected`).
 - `ha-policy.sh` aplica la política `ha-pedidos360`; `ms-rabbitmq-admin` arranca contra el clúster y responde 401 sin token.
+- API del administrador con JWT firmados (JWKS local): 54 casos, entre ellos 401 sin token / vencido / audiencia o emisor
+  incorrectos, 403 con rol Cliente, 400 por nombres vacíos, con símbolos, de 300 caracteres o con prefijo `amq.`, 409 al repetir,
+  404 al no existir, el listado de colas y el vaciado (3 mensajes publicados, 3 eliminados). Sin la API de gestión, el listado
+  responde 503 y `GET /queues/{nombre}` sigue respondiendo 200.
+- Error recuperable (directorio de comprobantes inválido): reintentos a +1 s, +2 s y +3 s, luego DLQ; notificación y auditoría
+  del mismo pedido se procesan al instante, sin esperar.
 
 ## Pendiente (requiere la cuenta AWS y el IDaaS)
 

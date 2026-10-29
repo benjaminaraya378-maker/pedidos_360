@@ -30,6 +30,7 @@ Paquetes comunes (`cl.duoc.pedidos360.security`, `cl.duoc.pedidos360.common`): `
 | `PRODUCTOS_URL`, `PEDIDOS_URL` | URLs internas entre servicios (en EC2: `http://localhost:8081` / `8082`) |
 | `RABBITMQ_ADDRESSES` | nodos del clúster RabbitMQ (`ms-pedidos` y `ms-rabbitmq-admin`): `localhost:5672,localhost:5673`. Sin definir, se usa un solo broker (`RABBITMQ_HOST`:`RABBITMQ_PORT`) |
 | `RABBITMQ_HOST`, `RABBITMQ_PORT`, `RABBITMQ_USER`, `RABBITMQ_PASSWORD`, `RABBITMQ_VHOST` | un solo broker y credenciales (por defecto `localhost:5672`, `guest`) |
+| `RABBITMQ_MANAGEMENT_URL` | API de gestión de RabbitMQ, solo para listar colas (`ms-rabbitmq-admin`): `http://localhost:15672` (nodo 1) o `:15673` (nodo 2) |
 | `COMPROBANTES_DIR` | carpeta donde `ms-pedidos` escribe los tickets (por defecto la carpeta temporal del sistema) |
 
 ## Mensajería con RabbitMQ
@@ -54,7 +55,7 @@ Los consumidores usan ACK manual y la misma política de error (`messaging/Consu
 |---|---|
 | Procesado correctamente | `basicAck` |
 | JSON ilegible o datos inválidos (p. ej. pedido sin correo) | `basicNack` sin requeue → DLQ, y se registra en el log |
-| Error recuperable (p. ej. no se pudo escribir el ticket) | se reintenta hasta `max-reintentos` (3) con el header `x-reintentos` |
+| Error recuperable (p. ej. no se pudo escribir el ticket) | se reintenta hasta `max-reintentos` (3) con el header `x-reintentos`, esperando `retry-delay-ms` x N (1 s, 2 s, 3 s) antes del reintento N |
 | Reintentos agotados | `basicNack` sin requeue → DLQ, y se registra en el log |
 | No se pudo publicar el reintento | `basicNack` con requeue (el mensaje no se pierde) |
 
@@ -81,8 +82,10 @@ quórum ante una partición de red.
 | Método | Ruta | Cuerpo / parámetros | Respuestas |
 |---|---|---|---|
 | POST | `/api/rabbit/queues` | `{nombre, durable?, autoDelete?, deadLetterExchange?, deadLetterRoutingKey?, ttlMs?, maxLength?}` | 201 · 400 · 409 |
-| GET | `/api/rabbit/queues/{nombre}` | — | 200 `{nombre, mensajes, consumidores}` · 404 |
-| DELETE | `/api/rabbit/queues/{nombre}` | — | 204 · 404 |
+| GET | `/api/rabbit/queues` | — | 200 `[{nombre, mensajes, consumidores}]` ordenado por nombre · 503 |
+| GET | `/api/rabbit/queues/{nombre}` | — | 200 `{nombre, mensajes, consumidores}` · 400 · 404 |
+| DELETE | `/api/rabbit/queues/{nombre}` | — | 204 · 400 · 404 |
+| DELETE | `/api/rabbit/queues/{nombre}/messages` | — (vacía la cola, la deja y conserva sus bindings) | 200 `{nombre, mensajesEliminados}` · 400 · 404 |
 | POST | `/api/rabbit/exchanges` | `{nombre, tipo: direct\|topic\|fanout\|headers, durable?, autoDelete?}` | 201 · 400 · 409 |
 | DELETE | `/api/rabbit/exchanges/{nombre}` | — | 204 · 404 |
 | POST | `/api/rabbit/bindings` | `{exchange, cola, routingKey?}` | 201 · 400 · 404 |
@@ -91,7 +94,9 @@ quórum ante una partición de red.
 Validaciones: nombres obligatorios, de máximo 255 caracteres, solo letras, números y `. _ - :` y sin el prefijo
 reservado `amq.`; `ttlMs` y `maxLength` mayores que 0; `deadLetterRoutingKey` solo junto con un `deadLetterExchange`
 que exista. Los errores vuelven en JSON con el detalle por campo; si el broker no está disponible, 503.
-La lógica está en `rabbitadmin/service/RabbitAdminService`; el controlador solo llama a sus métodos.
+La lógica está en `rabbitadmin/service/RabbitAdminService`; el controlador solo llama a sus métodos. El listado de colas lo
+pide a la API de gestión de RabbitMQ (`rabbitadmin/client/RabbitManagementClient`), porque AMQP no sabe listar; si esa API no
+responde, el listado devuelve 503 y el resto de las operaciones siguen funcionando.
 
 ## Ejecutar / desplegar en EC2
 
