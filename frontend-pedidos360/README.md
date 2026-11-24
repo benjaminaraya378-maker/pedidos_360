@@ -7,10 +7,11 @@ Inicia sesión contra el tenant de **Microsoft Entra** con OpenID Connect (Autho
 ```
 src/app/
 ├─ app.config.ts        # PublicClientApplication, MSAL_GUARD_CONFIG, MSAL_INTERCEPTOR_CONFIG (protectedResourceMap)
-├─ app.routes.ts        # /productos, /pedidos, /perfil (MsalGuard) · /admin (MsalGuard + roleGuard('Admin'))
+├─ app.routes.ts        # /productos, /pedidos, /perfil (MsalGuard) · /admin, /analitica, /kafka (MsalGuard + roleGuard('Admin'))
 ├─ core/auth.service.ts # login/logout, acquireTokenSilent, roles y scopes leídos de los claims del access token
 ├─ core/api.service.ts  # llamadas al API Gateway (/api/productos, /api/pedidos, /api/bff/**)
-└─ features/            # home (dashboard BFF), productos, pedidos, perfil (claims del token), admin, no-autorizado
+└─ features/            # home (dashboard BFF), productos, pedidos, perfil (claims del token), admin, analitica (ms-analitica),
+                         # kafka (ms-kafka-admin), no-autorizado
 ```
 
 ## Configuración (`src/environments/environment.ts` y `environment.development.ts`)
@@ -32,6 +33,16 @@ asociado a Pedidos360-Web; roles asignados a los usuarios en Enterprise applicat
 
 ```bash
 npm install
-npm start            # http://localhost:4200 (proxy.conf.json envía /api/** a los microservicios locales)
+npm start            # http://localhost:4200 (proxy.conf.json envía /api/** a los microservicios locales: bff 8080,
+                     # productos 8081, pedidos 8082, kafka-admin 8084, analitica 8085)
 npm run build:prod   # dist/frontend-pedidos360/browser → publicar en S3 + CloudFront (o similar con HTTPS)
 ```
+
+## Vistas de EP5 (Kafka)
+
+| Ruta | Rol | Qué muestra | Backend |
+|---|---|---|---|
+| `/pedidos` | Cliente/Admin | Un pedido nuevo aparece en CREADO y la vista vuelve a consultar cada 2 s hasta que el inventario (vía Kafka) lo pasa a EN_PREPARACION o CANCELADO, con el motivo | ms-pedidos |
+| `/productos` | Admin | Botón *Reponer 10 unidades* (`PATCH /api/productos/{id}/stock`), que publica STOCK_REPUESTO en Kafka | ms-productos |
+| `/analitica` | Admin | Métricas en tiempo cuasi real (consulta cada 3 s): pedidos por estado, ventas, alertas de stock bajo y los últimos eventos con su tópico, partición, offset y clave | ms-analitica (`/api/analitica/resumen`) |
+| `/kafka` | Admin | Brokers y controlador; tópicos con particiones, líder de cada partición, ISR, retención y mensajes; consumer groups con lag por partición; crear tópico, cambiar retención y eliminar | ms-kafka-admin (`/api/kafka/**`) |

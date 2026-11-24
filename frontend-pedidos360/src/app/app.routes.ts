@@ -29,6 +29,18 @@ export const routes: Routes = [
     title: 'Administración · Pedidos360',
   },
   {
+    path: 'analitica',
+    canActivate: [MsalGuard, roleGuard('Admin')],
+    loadComponent: () => import('./features/analitica/analitica').then((m) => m.Analitica),
+    title: 'Analítica en tiempo real · Pedidos360',
+  },
+  {
+    path: 'kafka',
+    canActivate: [MsalGuard, roleGuard('Admin')],
+    loadComponent: () => import('./features/kafka/kafka').then((m) => m.Kafka),
+    title: 'Kafka · Pedidos360',
+  },
+  {
     path: 'no-autorizado',
     loadComponent: () => import('./features/no-autorizado/no-autorizado').then((m) => m.NoAutorizado),
     title: 'Sin autorización · Pedidos360',

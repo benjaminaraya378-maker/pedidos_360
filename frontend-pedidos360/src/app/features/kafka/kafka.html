@@ -1,0 +1,167 @@
+<div class="encabezado">
+  <div>
+    <h1>Kafka</h1>
+    <p>Administración del clúster vía <code>ms-kafka-admin</code> (<code>/api/kafka/**</code>, rol <strong>Admin</strong>).</p>
+  </div>
+  <button type="button" class="boton boton--secundario" [disabled]="cargando()" (click)="cargar()">Actualizar</button>
+</div>
+
+@if (mensaje()) { <div class="aviso aviso--exito" role="status">{{ mensaje() }}</div> }
+@if (error()) { <div class="aviso aviso--error" role="alert">{{ error() }}</div> }
+
+@if (cluster(); as c) {
+  <section class="tarjeta bloque">
+    <h2>Clúster</h2>
+    <div class="fila">
+      @for (b of c.brokers; track b.id) {
+        <span class="broker" [class.broker--controlador]="b.id === c.controlador">
+          broker {{ b.id }} · {{ b.host }}:{{ b.puerto }}
+          @if (b.id === c.controlador) { <strong>· controlador</strong> }
+        </span>
+      }
+    </div>
+    <p class="silencio">Cluster ID <code>{{ c.clusterId }}</code></p>
+  </section>
+}
+
+<div class="dos-columnas">
+  <div class="principal">
+    <section class="tarjeta">
+      <h2>Tópicos</h2>
+      @if (cargando() && topicos().length === 0) {
+        <p class="cargando">Consultando a ms-kafka-admin…</p>
+      } @else if (topicos().length === 0) {
+        <div class="vacio">No hay tópicos.</div>
+      } @else {
+        <div class="desplazable">
+          <table class="tabla">
+            <thead>
+              <tr>
+                <th>Tópico</th><th class="numero">Part.</th><th class="numero">Répl.</th><th>Líder por partición</th>
+                <th>Retención</th><th class="numero">min ISR</th><th class="numero">Mensajes</th><th></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (t of topicos(); track t.nombre) {
+                <tr>
+                  <td>
+                    <code>{{ t.nombre }}</code>
+                    @if (!isrCompleto(t)) { <span class="etiqueta etiqueta--CANCELADO">ISR incompleto</span> }
+                  </td>
+                  <td class="numero">{{ t.particiones }}</td>
+                  <td class="numero">{{ t.replicas }}</td>
+                  <td><code class="lideres">{{ lideres(t) }}</code></td>
+                  <td>{{ retencion(t) }}</td>
+                  <td class="numero">{{ config(t, 'min.insync.replicas') }}</td>
+                  <td class="numero">{{ t.mensajes | number }}</td>
+                  <td>
+                    <button type="button" class="boton boton--secundario boton--pequeno" [disabled]="ocupado()"
+                            (click)="eliminar(t)" [attr.aria-label]="'Eliminar ' + t.nombre">Eliminar</button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </section>
+
+    <section class="tarjeta">
+      <h2>Consumer groups</h2>
+      @if (grupos().length === 0) {
+        <p class="silencio">No hay grupos todavía: aparecen cuando un microservicio empieza a consumir.</p>
+      } @else {
+        <table class="tabla">
+          <thead><tr><th>Grupo</th><th>Estado</th><th class="numero">Miembros</th><th class="numero">Lag</th><th></th></tr></thead>
+          <tbody>
+            @for (g of grupos(); track g.grupo) {
+              <tr>
+                <td><code>{{ g.grupo }}</code></td>
+                <td><span class="etiqueta" [class.etiqueta--ok]="g.estado === 'STABLE'">{{ g.estado }}</span></td>
+                <td class="numero">{{ g.miembros }}</td>
+                <td class="numero" [class.lag]="g.lagTotal > 0">{{ g.lagTotal | number }}</td>
+                <td><button type="button" class="boton boton--secundario boton--pequeno" (click)="verGrupo(g.grupo)">Detalle</button></td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      }
+
+      @if (grupoAbierto(); as d) {
+        <div class="detalle">
+          <h3><code>{{ d.grupo }}</code> · {{ d.estado }} · asignador {{ d.asignador || '—' }} · coordinador broker {{ d.coordinador }}</h3>
+          <table class="tabla">
+            <thead>
+              <tr><th>Tópico</th><th class="numero">Part.</th><th class="numero">Confirmado</th><th class="numero">Fin</th><th class="numero">Lag</th><th>Consumidor</th></tr>
+            </thead>
+            <tbody>
+              @for (o of d.offsets; track o.topico + o.particion) {
+                <tr>
+                  <td><code>{{ o.topico }}</code></td>
+                  <td class="numero">{{ o.particion }}</td>
+                  <td class="numero">{{ o.offsetConfirmado ?? '—' }}</td>
+                  <td class="numero">{{ o.offsetFin }}</td>
+                  <td class="numero" [class.lag]="o.lag > 0">{{ o.lag }}</td>
+                  <td><code>{{ o.consumidor ?? 'sin asignar' }}</code></td>
+                </tr>
+              }
+            </tbody>
+          </table>
+          <button type="button" class="boton boton--secundario boton--pequeno" (click)="grupoAbierto.set(null)">Cerrar</button>
+        </div>
+      }
+    </section>
+  </div>
+
+  <aside class="lateral">
+    <section class="tarjeta">
+      <h2>Cambiar retención</h2>
+      <p class="silencio">Se aplica en caliente con <code>PATCH /api/kafka/topics/{{ '{' }}nombre{{ '}' }}/config</code>.</p>
+      <div class="campo">
+        <label for="ret-topico">Tópico</label>
+        <select id="ret-topico" [(ngModel)]="retencionTopico">
+          @for (t of topicos(); track t.nombre) { <option [value]="t.nombre">{{ t.nombre }}</option> }
+        </select>
+      </div>
+      <div class="campo">
+        <label for="ret-dias">Retención (días)</label>
+        <input id="ret-dias" type="number" min="0.1" step="0.5" [(ngModel)]="retencionDias" />
+      </div>
+      <button type="button" class="boton" [disabled]="ocupado() || !retencionTopico" (click)="cambiarRetencion()">Aplicar</button>
+    </section>
+
+    <section class="tarjeta">
+      <h2>Nuevo tópico</h2>
+      <div class="campo">
+        <label for="t-nombre">Nombre</label>
+        <input id="t-nombre" [(ngModel)]="nuevo.nombre" placeholder="pedidos360.prueba" />
+      </div>
+      <div class="fila">
+        <div class="campo">
+          <label for="t-part">Particiones</label>
+          <input id="t-part" type="number" min="1" max="50" [(ngModel)]="nuevo.particiones" />
+        </div>
+        <div class="campo">
+          <label for="t-repl">Réplicas</label>
+          <input id="t-repl" type="number" min="1" [max]="cluster()?.brokers?.length ?? 3" [(ngModel)]="nuevo.replicas" />
+        </div>
+      </div>
+      <div class="fila">
+        <div class="campo">
+          <label for="t-policy">Cleanup policy</label>
+          <select id="t-policy" [(ngModel)]="nuevo.cleanupPolicy">
+            <option value="delete">delete</option>
+            <option value="compact">compact</option>
+          </select>
+        </div>
+        @if (nuevo.cleanupPolicy === 'delete') {
+          <div class="campo">
+            <label for="t-ret">Retención (días)</label>
+            <input id="t-ret" type="number" min="0.1" step="0.5" [(ngModel)]="nuevo.retencionDias" />
+          </div>
+        }
+      </div>
+      <button type="button" class="boton" [disabled]="ocupado() || !nuevo.nombre.trim()" (click)="crear()">Crear tópico</button>
+    </section>
+  </aside>
+</div>

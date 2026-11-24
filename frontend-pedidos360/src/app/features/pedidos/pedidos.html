@@ -29,6 +29,11 @@
               </div>
               <span class="etiqueta etiqueta--{{ p.estado }}">{{ p.estado.replace('_', ' ') }}</span>
             </header>
+            @if (p.estado === 'CREADO') {
+              <p class="silencio">Esperando al inventario: el evento va por Kafka a ms-productos…</p>
+            } @else if (p.motivoEstado) {
+              <p class="silencio">{{ p.motivoEstado }}</p>
+            }
             <table class="tabla">
               <thead>
                 <tr><th>Producto</th><th class="numero">Cant.</th><th class="numero">Unitario</th><th class="numero">Subtotal</th></tr>

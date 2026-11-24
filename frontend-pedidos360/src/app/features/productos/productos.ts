@@ -73,6 +73,18 @@ export class Productos {
     });
   }
 
+  /** Solo Admin: PATCH /api/productos/{id}/stock. ms-productos publica STOCK_REPUESTO en Kafka. */
+  reponer(p: Producto, cantidad = 10): void {
+    this.error.set(null);
+    this.api.reponerStock(p.id, cantidad).subscribe({
+      next: (actualizado) => {
+        this.mensaje.set(`Stock de "${actualizado.nombre}": ${p.stock} → ${actualizado.stock}.`);
+        this.cargar();
+      },
+      error: (err) => this.error.set(ApiService.mensajeDeError(err)),
+    });
+  }
+
   actualizarCampo<K extends keyof ProductoRequest>(campo: K, valor: ProductoRequest[K]): void {
     this.form.update((f) => ({ ...f, [campo]: valor }));
   }

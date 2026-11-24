@@ -2,7 +2,23 @@ import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
-import { ApiError, CheckoutRequest, Dashboard, Me, Pedido, Producto, ProductoRequest } from './models';
+import {
+  ApiError,
+  CheckoutRequest,
+  ClusterKafka,
+  ConfiguracionRequest,
+  Dashboard,
+  GrupoDetalle,
+  GrupoResumen,
+  Me,
+  Pedido,
+  Producto,
+  ProductoRequest,
+  ResumenAnalitica,
+  TopicoDetalle,
+  TopicoRequest,
+  TopicoResumen,
+} from './models';
 
 /**
  * Cliente HTTP del sistema. Todas las llamadas pasan por el API Manager (API Gateway);
@@ -20,6 +36,10 @@ export class ApiService {
   }
   crearProducto(body: ProductoRequest): Observable<Producto> {
     return this.http.post<Producto>(`${this.base}/api/productos`, body);
+  }
+  /** Solo Admin. Publica STOCK_REPUESTO en Kafka: la alerta de stock bajo desaparece de la analítica. */
+  reponerStock(id: number, cantidad: number): Observable<Producto> {
+    return this.http.patch<Producto>(`${this.base}/api/productos/${id}/stock`, { cantidad });
   }
 
   // ---- ms-pedidos ----
@@ -39,6 +59,37 @@ export class ApiService {
   }
   pedidosAdmin(): Observable<Pedido[]> {
     return this.http.get<Pedido[]>(`${this.base}/api/bff/admin/pedidos`);
+  }
+
+  // ---- ms-analitica (rol Admin) ----
+  resumenAnalitica(): Observable<ResumenAnalitica> {
+    return this.http.get<ResumenAnalitica>(`${this.base}/api/analitica/resumen`);
+  }
+
+  // ---- ms-kafka-admin (rol Admin) ----
+  kafkaCluster(): Observable<ClusterKafka> {
+    return this.http.get<ClusterKafka>(`${this.base}/api/kafka/cluster`);
+  }
+  kafkaTopicos(): Observable<TopicoResumen[]> {
+    return this.http.get<TopicoResumen[]>(`${this.base}/api/kafka/topics`);
+  }
+  kafkaTopico(nombre: string): Observable<TopicoDetalle> {
+    return this.http.get<TopicoDetalle>(`${this.base}/api/kafka/topics/${encodeURIComponent(nombre)}`);
+  }
+  crearTopico(body: TopicoRequest): Observable<TopicoDetalle> {
+    return this.http.post<TopicoDetalle>(`${this.base}/api/kafka/topics`, body);
+  }
+  configurarTopico(nombre: string, body: ConfiguracionRequest): Observable<TopicoDetalle> {
+    return this.http.patch<TopicoDetalle>(`${this.base}/api/kafka/topics/${encodeURIComponent(nombre)}/config`, body);
+  }
+  eliminarTopico(nombre: string): Observable<void> {
+    return this.http.delete<void>(`${this.base}/api/kafka/topics/${encodeURIComponent(nombre)}`);
+  }
+  kafkaGrupos(): Observable<GrupoResumen[]> {
+    return this.http.get<GrupoResumen[]>(`${this.base}/api/kafka/consumer-groups`);
+  }
+  kafkaGrupo(grupo: string): Observable<GrupoDetalle> {
+    return this.http.get<GrupoDetalle>(`${this.base}/api/kafka/consumer-groups/${encodeURIComponent(grupo)}`);
   }
 
   static mensajeDeError(err: unknown): string {

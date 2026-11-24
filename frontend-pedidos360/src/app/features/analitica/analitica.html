@@ -1,0 +1,118 @@
+<div class="encabezado">
+  <div>
+    <h1>Analítica en tiempo real</h1>
+    <p>
+      ms-analitica consume los tópicos <code>pedidos360.pedidos</code> y <code>pedidos360.inventario</code> en su
+      propio consumer group (<code>pedidos360-analitica</code>) y calcula estas métricas con cada evento.
+    </p>
+  </div>
+  <button type="button" class="boton boton--secundario" (click)="alternar()" [attr.aria-pressed]="enVivo()">
+    <span class="punto" [class.punto--vivo]="enVivo()" aria-hidden="true"></span>
+    {{ enVivo() ? 'En vivo · cada 3 s' : 'En pausa' }}
+  </button>
+</div>
+
+@if (error()) { <div class="aviso aviso--error" role="alert">{{ error() }}</div> }
+
+@if (resumen(); as r) {
+  <section class="kpis" aria-label="Indicadores">
+    <div class="kpi">
+      <span class="kpi__etiqueta">Pedidos</span>
+      <strong class="kpi__valor">{{ r.totalPedidos }}</strong>
+      <span class="silencio">{{ r.pedidosUltimaHora }} en la última hora</span>
+    </div>
+    <div class="kpi">
+      <span class="kpi__etiqueta">Confirmados</span>
+      <strong class="kpi__valor">{{ cantidad('EN_PREPARACION') }}</strong>
+      <span class="silencio">{{ cantidad('CREADO') }} esperando inventario</span>
+    </div>
+    <div class="kpi">
+      <span class="kpi__etiqueta">Cancelados por stock</span>
+      <strong class="kpi__valor">{{ cantidad('CANCELADO') }}</strong>
+      <span class="silencio">{{ r.tasaCancelacion | percent: '1.0-1' }} de los resueltos</span>
+    </div>
+    <div class="kpi">
+      <span class="kpi__etiqueta">Ventas confirmadas</span>
+      <strong class="kpi__valor">{{ r.ventasConfirmadas | currency: 'CLP' : 'symbol-narrow' : '1.0-0' }}</strong>
+      <span class="silencio">ticket promedio {{ r.ticketPromedio | currency: 'CLP' : 'symbol-narrow' : '1.0-0' }}</span>
+    </div>
+    <div class="kpi">
+      <span class="kpi__etiqueta">Eventos procesados</span>
+      <strong class="kpi__valor">{{ r.eventosProcesados | number }}</strong>
+      <span class="silencio">
+        @if (r.latenciaPromedioMs !== null) { latencia media {{ r.latenciaPromedioMs | number }} ms }
+        @else { sin eventos recientes }
+      </span>
+    </div>
+  </section>
+
+  <div class="dos-columnas">
+    <section class="tarjeta">
+      <h2>Últimos eventos</h2>
+      @if (r.ultimosEventos.length === 0) {
+        <div class="vacio">Aún no llegan eventos. Crea un pedido para verlos aparecer aquí.</div>
+      } @else {
+        <table class="tabla">
+          <thead>
+            <tr><th>Hora</th><th>Tópico · partición · offset</th><th>Clave</th><th>Evento</th></tr>
+          </thead>
+          <tbody>
+            @for (e of r.ultimosEventos; track e.eventoId) {
+              <tr>
+                <td class="numero">{{ e.fecha | date: 'HH:mm:ss' }}</td>
+                <td><code>{{ corto(e.topico) }}</code> · p{{ e.particion }} · #{{ e.offset }}</td>
+                <td><code>{{ e.clave }}</code></td>
+                <td>
+                  <span class="etiqueta">{{ e.tipo }}</span>
+                  <div class="silencio">{{ e.descripcion }}</div>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      }
+    </section>
+
+    <aside class="lateral">
+      <section class="tarjeta" [class.tarjeta--alerta]="r.alertasStockBajo.length > 0">
+        <h2>Alertas de stock bajo</h2>
+        @if (r.alertasStockBajo.length === 0) {
+          <p class="silencio">Ningún producto en o bajo su umbral ({{ r.productosMonitoreados }} monitoreados).</p>
+        } @else {
+          <ul class="alertas">
+            @for (a of r.alertasStockBajo; track a.productoId) {
+              <li>
+                <strong>{{ a.nombre }}</strong>
+                <span class="etiqueta etiqueta--CANCELADO">{{ a.stockActual }} u.</span>
+                <div class="silencio">umbral {{ a.umbral }} · {{ a.actualizado | date: 'HH:mm:ss' }}</div>
+              </li>
+            }
+          </ul>
+        }
+      </section>
+
+      <section class="tarjeta">
+        <h2>Más vendidos</h2>
+        @if (r.topProductos.length === 0) {
+          <p class="silencio">Sin pedidos confirmados todavía.</p>
+        } @else {
+          <table class="tabla">
+            <thead><tr><th>Producto</th><th class="numero">Unid.</th><th class="numero">Monto</th></tr></thead>
+            <tbody>
+              @for (p of r.topProductos; track p.productoId) {
+                <tr>
+                  <td>{{ p.nombre }}</td>
+                  <td class="numero">{{ p.unidades }}</td>
+                  <td class="numero">{{ p.monto | currency: 'CLP' : 'symbol-narrow' : '1.0-0' }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        }
+      </section>
+    </aside>
+  </div>
+  <p class="silencio pie">Actualizado {{ r.generadoEn | date: 'HH:mm:ss' }}</p>
+} @else if (!error()) {
+  <p class="cargando">Consultando a ms-analitica…</p>
+}

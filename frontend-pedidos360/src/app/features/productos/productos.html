@@ -27,6 +27,9 @@
               <span class="silencio">{{ p.stock === 0 ? 'Sin stock' : p.stock + ' disponibles' }}</span>
             </div>
             <button type="button" class="boton boton--pequeno" [disabled]="p.stock === 0" (click)="agregar(p)">Agregar al pedido</button>
+            @if (auth.isAdmin()) {
+              <button type="button" class="boton boton--secundario boton--pequeno" (click)="reponer(p)">Reponer 10 unidades</button>
+            }
           </article>
         }
       </div>

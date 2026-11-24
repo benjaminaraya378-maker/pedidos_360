@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { CurrencyPipe, DatePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { ApiService } from '../../core/api.service';
@@ -23,8 +23,13 @@ export class Pedidos {
   protected readonly error = signal<string | null>(null);
   protected readonly mensaje = signal<string | null>(null);
 
+  private readonly destroyRef = inject(DestroyRef);
+  private seguimiento?: ReturnType<typeof setTimeout>;
+  private consultasDeSeguimiento = 0;
+
   constructor() {
     this.cargar();
+    this.destroyRef.onDestroy(() => clearTimeout(this.seguimiento));
   }
 
   cargar(): void {
@@ -34,6 +39,7 @@ export class Pedidos {
       next: (lista) => {
         this.pedidos.set(lista);
         this.cargando.set(false);
+        this.seguirPendientes();
       },
       error: (err) => {
         this.error.set(ApiService.mensajeDeError(err));
@@ -49,9 +55,13 @@ export class Pedidos {
     this.error.set(null);
     this.api.crearPedido({ items }).subscribe({
       next: (pedido) => {
-        this.mensaje.set(`Pedido #${pedido.id} creado por ${pedido.total.toLocaleString('es-CL')} CLP.`);
+        this.mensaje.set(
+          `Pedido #${pedido.id} creado por ${pedido.total.toLocaleString('es-CL')} CLP. ` +
+            'El inventario lo confirmará en unos segundos.',
+        );
         this.carrito.vaciar();
         this.enviando.set(false);
+        this.consultasDeSeguimiento = 0;
         this.cargar();
       },
       error: (err) => {
@@ -59,6 +69,26 @@ export class Pedidos {
         this.enviando.set(false);
       },
     });
+  }
+
+  /**
+   * Un pedido en CREADO está esperando al inventario: ms-productos descuenta el stock al leer el evento de Kafka y
+   * ms-pedidos lo pasa a EN_PREPARACION o CANCELADO. Mientras haya alguno así, se vuelve a consultar cada 2 s
+   * (máximo 10 veces) para que el cambio se vea sin recargar la página.
+   */
+  private seguirPendientes(): void {
+    clearTimeout(this.seguimiento);
+    if (this.consultasDeSeguimiento >= 10 || !this.pedidos().some((p) => p.estado === 'CREADO')) return;
+    this.consultasDeSeguimiento++;
+    this.seguimiento = setTimeout(() => {
+      this.api.listarPedidos().subscribe({
+        next: (lista) => {
+          this.pedidos.set(lista);
+          this.seguirPendientes();
+        },
+        error: () => undefined,
+      });
+    }, 2000);
   }
 
   cantidadDesdeEvento(ev: Event): number {

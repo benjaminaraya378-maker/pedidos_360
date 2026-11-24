@@ -1,0 +1,40 @@
+.kpis {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  margin-bottom: 20px;
+}
+.kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 18px;
+  background: var(--superficie);
+  border: 1px solid var(--linea);
+  border-radius: var(--radio);
+  &__etiqueta { font-size: 0.8rem; font-weight: 600; color: var(--tinta-suave); }
+  &__valor { font-size: 1.6rem; font-variant-numeric: tabular-nums; }
+}
+.lateral { display: grid; gap: 20px; align-content: start; }
+.tarjeta--alerta { border-color: #f2c4bf; }
+.alertas {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+  li { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 10px; }
+  .silencio { flex-basis: 100%; }
+}
+.punto {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--tinta-suave);
+  &--vivo { background: var(--verde); animation: latido 1.6s ease-in-out infinite; }
+}
+@keyframes latido {
+  50% { opacity: 0.35; }
+}
+.pie { margin-top: 12px; text-align: right; }
+h2 { margin-top: 0; font-size: 1.05rem; }
