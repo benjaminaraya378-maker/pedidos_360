@@ -16,6 +16,7 @@ public record PedidoResponse(
     EstadoPedido estado,
     BigDecimal total,
     String observacion,
+    String motivoEstado,
     List<Item> items) {
 
   public record Item(Long id, Long productoId, String nombreProducto, Integer cantidad,
@@ -28,7 +29,7 @@ public record PedidoResponse(
 
   public static PedidoResponse de(Pedido p) {
     return new PedidoResponse(p.getId(), p.getClienteOid(), p.getClienteEmail(), p.getClienteNombre(),
-        p.getFecha(), p.getEstado(), p.getTotal(), p.getObservacion(),
+        p.getFecha(), p.getEstado(), p.getTotal(), p.getObservacion(), p.getMotivoEstado(),
         p.getItems().stream().map(Item::de).toList());
   }
 }

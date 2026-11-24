@@ -1,0 +1,62 @@
+server:
+  port: ${SERVER_PORT:8085}
+
+spring:
+  application:
+    name: ms-analitica
+  # Cliente Kafka (EP5). Brokers del docker-compose.kafka.yml; manejo de errores y DLT en kafka/KafkaConfig
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092,localhost:9093,localhost:9094}
+    client-id: ms-analitica
+    producer:
+      # Solo se usa para reenviar al DLT lo que la analítica no pudo procesar
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      properties:
+        enable.idempotence: true
+        max.block.ms: 5000
+        spring.json.type.mapping: pedidoEvento:cl.duoc.pedidos360.kafka.evento.PedidoEvento,inventarioEvento:cl.duoc.pedidos360.kafka.evento.InventarioEvento
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      max-poll-records: 100
+      properties:
+        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
+        # Dos tópicos, dos tipos: el header __TypeId__ que pone cada productor dice a qué DTO convertir el JSON
+        spring.json.type.mapping: pedidoEvento:cl.duoc.pedidos360.kafka.evento.PedidoEvento,inventarioEvento:cl.duoc.pedidos360.kafka.evento.InventarioEvento
+        spring.json.trusted.packages: cl.duoc.pedidos360.kafka.evento
+        session.timeout.ms: 15000
+        heartbeat.interval.ms: 3000
+        partition.assignment.strategy: org.apache.kafka.clients.consumer.CooperativeStickyAssignor
+    listener:
+      ack-mode: record
+      concurrency: 3                         # 3 hilos para 6 particiones (3 de pedidos + 3 de inventario)
+      missing-topics-fatal: false
+
+pedidos360:
+  security:
+    # Valores del IDaaS (copiar desde un token decodificado en https://jwt.ms)
+    issuer: ${JWT_ISSUER:https://REEMPLAZAR-TENANT-ID.ciamlogin.com/REEMPLAZAR-TENANT-ID/v2.0}
+    jwk-set-uri: ${JWT_JWKS_URI:https://REEMPLAZAR-SUBDOMINIO.ciamlogin.com/REEMPLAZAR-TENANT-ID/discovery/v2.0/keys}
+    audiences: ${JWT_AUDIENCE:REEMPLAZAR-CLIENT-ID-API}
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200}
+    roles-claim: ${JWT_ROLES_CLAIM:roles}
+  kafka:
+    topicos:
+      pedidos:
+        nombre: pedidos360.pedidos
+      inventario:
+        nombre: pedidos360.inventario
+    dlt:
+      sufijo: .dlt
+    grupos:
+      analitica: pedidos360-analitica
+    reintentos:
+      maximo: 3
+      espera-inicial-ms: 1000
+      multiplicador: 2.0
+      espera-maxima-ms: 10000
+    # Las métricas viven en memoria: al arrancar se releen los tópicos desde el inicio para reconstruirlas
+    reconstruir-al-iniciar: ${ANALITICA_RECONSTRUIR:true}

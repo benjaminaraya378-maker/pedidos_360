@@ -29,6 +29,47 @@ spring:
         # Cada consumidor confirma con basicAck / basicNack de forma explícita
         acknowledge-mode: manual
         prefetch: 10
+  # Cliente Kafka (EP5). Brokers del docker-compose.kafka.yml; el resto de la configuración está en kafka/KafkaConfig
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092,localhost:9093,localhost:9094}
+    client-id: ms-pedidos
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      # El valor lo serializa KafkaConfig: DTO → JSON (JsonSerializer), byte[] → tal cual (reenvíos al DLT)
+      acks: all                              # el líder confirma cuando las réplicas en sincronía (mín. 2) escribieron
+      properties:
+        enable.idempotence: true             # un reintento del productor no duplica ni desordena mensajes
+        max.in.flight.requests.per.connection: 5
+        delivery.timeout.ms: 30000           # tiempo total para entregar un mensaje, reintentos incluidos
+        request.timeout.ms: 10000
+        max.block.ms: 5000                   # si Kafka no responde, send() no retiene la petición HTTP más de 5 s
+        linger.ms: 5                         # espera 5 ms para agrupar mensajes en un mismo lote
+        compression.type: lz4
+        # Tipo lógico en el header __TypeId__: cada consumidor lo traduce a su propia clase (no comparten código).
+        # inventarioEvento se usa al reenviar al DLT un evento de inventario que no se pudo procesar
+        spring.json.type.mapping: pedidoEvento:cl.duoc.pedidos360.kafka.evento.PedidoEvento,inventarioEvento:cl.duoc.pedidos360.kafka.evento.InventarioEvento
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      # ErrorHandlingDeserializer: si el JSON es ilegible no se cae el consumidor; el error llega al DefaultErrorHandler
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      auto-offset-reset: earliest            # un grupo nuevo empieza desde el primer mensaje disponible
+      enable-auto-commit: false              # el offset lo confirma el contenedor después de procesar (ack-mode)
+      max-poll-records: 50
+      properties:
+        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
+        spring.json.type.mapping: inventarioEvento:cl.duoc.pedidos360.kafka.evento.InventarioEvento
+        spring.json.value.default.type: cl.duoc.pedidos360.kafka.evento.InventarioEvento
+        spring.json.trusted.packages: cl.duoc.pedidos360.kafka.evento
+        session.timeout.ms: 15000            # si un consumidor deja de responder 15 s, sus particiones se reasignan
+        heartbeat.interval.ms: 3000
+        # Rebalanceo incremental: al entrar o salir un consumidor, los demás siguen con sus particiones
+        partition.assignment.strategy: org.apache.kafka.clients.consumer.CooperativeStickyAssignor
+    listener:
+      ack-mode: record                       # confirma el offset de cada evento apenas termina de procesarse
+      concurrency: 3                         # 3 hilos consumidores: uno por partición
+      missing-topics-fatal: false            # si el tópico aún no existe, el servicio arranca igual y espera
+    admin:
+      operation-timeout: 10s                 # si Kafka no está al iniciar, no retrasa el arranque más de 10 s
 
 pedidos360:
   security:
@@ -60,6 +101,28 @@ pedidos360:
       cola: pedidos360.auditoria.queue
       binding-key: pedido.creado
       dlq: pedidos360.auditoria.dlq
+  # Tópicos, grupos y reintentos de Kafka: se definen SOLO aquí y los usan KafkaConfig, productores y consumidores
+  kafka:
+    topicos:
+      pedidos:                        # dueño: ms-pedidos (KafkaAdmin lo crea al iniciar con estos parámetros)
+        nombre: pedidos360.pedidos
+        particiones: 3                # hasta 3 consumidores en paralelo por grupo
+        replicas: 3                   # 1 líder + 2 copias en brokers distintos: tolera la caída de 1 broker
+        cleanup-policy: delete        # es un historial de eventos: se borra por antigüedad
+        retencion-ms: 604800000       # 7 días para reprocesar (p. ej. reconstruir la analítica tras una caída)
+        min-insync-replicas: 2        # con acks=all, cada evento confirmado queda en al menos 2 brokers
+      inventario:                     # dueño: ms-productos; aquí solo se consume
+        nombre: pedidos360.inventario
+    dlt:
+      sufijo: .dlt                    # pedidos360.pedidos.dlt
+      retencion-ms: 1209600000        # 14 días para revisar y reprocesar los eventos fallidos
+    grupos:
+      estado-pedidos: pedidos360-estado-pedidos
+    reintentos:
+      maximo: 3                       # 3 reintentos ante errores recuperables, luego al DLT
+      espera-inicial-ms: 1000         # 1 s, 2 s, 4 s
+      multiplicador: 2.0
+      espera-maxima-ms: 10000
   comprobantes:
     # Carpeta donde se escriben los tickets generados por el consumidor de comprobantes
     directorio: ${COMPROBANTES_DIR:${java.io.tmpdir}/pedidos360-comprobantes}

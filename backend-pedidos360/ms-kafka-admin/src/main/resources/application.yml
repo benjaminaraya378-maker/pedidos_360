@@ -1,0 +1,28 @@
+server:
+  port: ${SERVER_PORT:8084}
+
+spring:
+  application:
+    name: ms-kafka-admin
+  # Clúster Kafka que este servicio administra (brokers del docker-compose.kafka.yml)
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092,localhost:9093,localhost:9094}
+    client-id: ms-kafka-admin
+    admin:
+      properties:
+        request.timeout.ms: 5000             # una petición sin respuesta en 5 s se da por fallida
+        default.api.timeout.ms: 10000        # tope total de cada operación de administración
+
+pedidos360:
+  kafka-admin:
+    # Tope que espera cada endpoint a Kafka; si se cumple, responde 503
+    timeout: 10s
+    # Tópicos del sistema que la API no deja borrar (sí se pueden inspeccionar y reconfigurar)
+    topicos-protegidos: pedidos360.pedidos,pedidos360.inventario,pedidos360.pedidos.dlt,pedidos360.inventario.dlt
+  security:
+    # Valores del IDaaS (copiar desde un token decodificado en https://jwt.ms)
+    issuer: ${JWT_ISSUER:https://REEMPLAZAR-TENANT-ID.ciamlogin.com/REEMPLAZAR-TENANT-ID/v2.0}
+    jwk-set-uri: ${JWT_JWKS_URI:https://REEMPLAZAR-SUBDOMINIO.ciamlogin.com/REEMPLAZAR-TENANT-ID/discovery/v2.0/keys}
+    audiences: ${JWT_AUDIENCE:REEMPLAZAR-CLIENT-ID-API}
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200}
+    roles-claim: ${JWT_ROLES_CLAIM:roles}

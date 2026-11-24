@@ -44,7 +44,8 @@ public class PedidoService {
   /**
    * Crea un pedido para el usuario del token: valida cada producto contra ms-productos,
    * calcula el total con el precio vigente. Al confirmarse la transacción, PedidoEventProducer
-   * publica el evento en RabbitMQ (notificación y comprobante se procesan de forma asíncrona).
+   * publica el evento en RabbitMQ (notificación, comprobante y auditoría se procesan de forma asíncrona) y
+   * PedidoKafkaProducer lo publica en Kafka (ms-productos descuenta el stock y ms-analitica actualiza sus métricas).
    */
   public PedidoResponse crear(Jwt jwt, CrearPedidoRequest req) {
     Pedido pedido = new Pedido();

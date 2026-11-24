@@ -13,6 +13,44 @@ spring:
     hibernate:
       ddl-auto: ${DB_DDL_AUTO:update}
     open-in-view: false
+  # Cliente Kafka (EP5). Brokers del docker-compose.kafka.yml; el resto de la configuración está en kafka/KafkaConfig
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092,localhost:9093,localhost:9094}
+    client-id: ms-productos
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      # El valor lo serializa KafkaConfig: DTO → JSON (JsonSerializer), byte[] → tal cual (reenvíos al DLT)
+      acks: all                              # el líder confirma cuando las réplicas en sincronía (mín. 2) escribieron
+      properties:
+        enable.idempotence: true             # un reintento del productor no duplica ni desordena mensajes
+        max.in.flight.requests.per.connection: 5
+        delivery.timeout.ms: 30000
+        request.timeout.ms: 10000
+        max.block.ms: 5000
+        linger.ms: 5
+        compression.type: lz4
+        # pedidoEvento se usa al reenviar al DLT un evento de pedido que no se pudo procesar
+        spring.json.type.mapping: inventarioEvento:cl.duoc.pedidos360.kafka.evento.InventarioEvento,pedidoEvento:cl.duoc.pedidos360.kafka.evento.PedidoEvento
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      max-poll-records: 50
+      properties:
+        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
+        spring.json.type.mapping: pedidoEvento:cl.duoc.pedidos360.kafka.evento.PedidoEvento
+        spring.json.value.default.type: cl.duoc.pedidos360.kafka.evento.PedidoEvento
+        spring.json.trusted.packages: cl.duoc.pedidos360.kafka.evento
+        session.timeout.ms: 15000
+        heartbeat.interval.ms: 3000
+        partition.assignment.strategy: org.apache.kafka.clients.consumer.CooperativeStickyAssignor
+    listener:
+      ack-mode: record
+      concurrency: 3                         # 3 hilos consumidores: uno por partición del tópico de pedidos
+      missing-topics-fatal: false
+    admin:
+      operation-timeout: 10s
 
 pedidos360:
   security:
@@ -22,3 +60,31 @@ pedidos360:
     audiences: ${JWT_AUDIENCE:REEMPLAZAR-CLIENT-ID-API}
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200}
     roles-claim: ${JWT_ROLES_CLAIM:roles}
+  inventario:
+    umbral-stock-bajo: ${UMBRAL_STOCK_BAJO:5}   # con 5 unidades o menos, el evento marca stockBajo=true
+  # Tópicos, grupos y reintentos de Kafka: se definen SOLO aquí
+  kafka:
+    topicos:
+      pedidos:                        # dueño: ms-pedidos; aquí solo se consume
+        nombre: pedidos360.pedidos
+      inventario:                     # dueño: ms-productos (KafkaAdmin lo crea al iniciar con estos parámetros)
+        nombre: pedidos360.inventario
+        particiones: 3
+        replicas: 3
+        # Cada evento trae el stock vigente del producto (clave = id del producto). Compactar conserva para siempre
+        # el último evento de cada producto: un consumidor nuevo reconstruye el inventario completo leyendo desde
+        # el inicio, sin que el tópico crezca sin límite.
+        cleanup-policy: compact
+        min-compaction-lag-ms: 604800000   # ningún evento se compacta antes de 7 días: ms-pedidos los alcanza a leer
+        segment-ms: 86400000               # un segmento por día: solo los segmentos cerrados se compactan
+        min-insync-replicas: 2
+    dlt:
+      sufijo: .dlt                    # pedidos360.inventario.dlt
+      retencion-ms: 1209600000        # 14 días
+    grupos:
+      inventario: pedidos360-inventario
+    reintentos:
+      maximo: 3                       # 1 s, 2 s, 4 s; luego al DLT
+      espera-inicial-ms: 1000
+      multiplicador: 2.0
+      espera-maxima-ms: 10000

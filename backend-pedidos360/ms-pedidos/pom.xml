@@ -48,6 +48,12 @@
       <artifactId>spring-boot-starter-amqp</artifactId>
     </dependency>
 
+    <!-- Streaming: Kafka (productor del tópico de pedidos y consumidor del tópico de inventario) -->
+    <dependency>
+      <groupId>org.springframework.kafka</groupId>
+      <artifactId>spring-kafka</artifactId>
+    </dependency>
+
     <!-- Observabilidad (health check para EC2 / API Gateway) -->
 
     <!-- Persistencia: JPA + MySQL (RDS) en la nube, H2 en memoria para desarrollo local -->
@@ -74,6 +80,11 @@
     <dependency>
       <groupId>org.springframework.security</groupId>
       <artifactId>spring-security-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.kafka</groupId>
+      <artifactId>spring-kafka-test</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>

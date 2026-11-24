@@ -52,6 +52,10 @@ public class Pedido {
   @Column(length = 300)
   private String observacion;
 
+  /** Por qué el pedido está en su estado actual (lo completa el flujo de Kafka: stock reservado o insuficiente). */
+  @Column(name = "motivo_estado", length = 300)
+  private String motivoEstado;
+
   @OneToMany(mappedBy = "pedido", cascade = CascadeType.ALL, orphanRemoval = true)
   private List<PedidoItem> items = new ArrayList<>();
 
