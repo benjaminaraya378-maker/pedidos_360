@@ -1,0 +1,32 @@
+# Kafka UI para administrar el clúster de Pedidos360 (EP5): brokers, tópicos, particiones, mensajes y consumer groups.
+# Requiere el clúster de docker-compose.kafka.yml arriba (se conecta a su red pedidos360-kafka).
+#   docker compose -f docker-compose.kafka-ui.yml up -d
+#   Abrir http://localhost:8090  (usuario y clave: KAFKA_UI_USER / KAFKA_UI_PASSWORD; por defecto admin / pedidos360)
+#
+# En la EC2 la consola no se publica a internet: se abre con un túnel SSH (ssh -L 8090:localhost:8090 ...), igual que
+# la consola de RabbitMQ.
+name: pedidos360-kafka-ui
+
+services:
+  kafka-ui:
+    image: provectuslabs/kafka-ui:v0.7.2
+    container_name: kafka-ui
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8090:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: pedidos360
+      # Listener INTERNO de los 3 brokers: Kafka UI corre dentro de la red de Docker
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka1:29092,kafka2:29092,kafka3:29092
+      # Consola con usuario y clave: desde aquí se pueden crear y borrar tópicos y publicar mensajes
+      AUTH_TYPE: LOGIN_FORM
+      SPRING_SECURITY_USER_NAME: ${KAFKA_UI_USER:-admin}
+      SPRING_SECURITY_USER_PASSWORD: ${KAFKA_UI_PASSWORD:-pedidos360}
+      DYNAMIC_CONFIG_ENABLED: "false"
+      JAVA_OPTS: -Xms128m -Xmx256m
+    networks: [kafka]
+
+networks:
+  kafka:
+    external: true
+    name: pedidos360-kafka
