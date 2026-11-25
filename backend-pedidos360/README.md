@@ -249,6 +249,8 @@ mvn -f ms-rabbitmq-admin/pom.xml -DskipTests package && nohup java -jar ms-rabbi
 mvn -f ms-kafka-admin/pom.xml    -DskipTests package && nohup java -jar ms-kafka-admin/target/ms-kafka-admin-1.0.0.jar &
 mvn -f ms-analitica/pom.xml      -DskipTests package && nohup java -jar ms-analitica/target/ms-analitica-1.0.0.jar &
 ```
+Para EP5 lo anterior lo automatiza `bash kafka/desplegar-ep5-ec2.sh` (en la EC2), y las rutas del API Gateway,
+`API_ID=<id> EC2_HOST=<ip> bash kafka/rutas-api-gateway-ep5.sh` (con AWS CLI).
 Exportar antes las variables de la tabla. Security group de la EC2: puertos 8080-8085 abiertos para el API Gateway
 (los de Kafka, Zookeeper y Kafka UI no se abren: se publican solo en `127.0.0.1`).
 La consola de RabbitMQ (`:15672` y `:15673`) muestra los nodos, colas y DLQ; no se abre al público.

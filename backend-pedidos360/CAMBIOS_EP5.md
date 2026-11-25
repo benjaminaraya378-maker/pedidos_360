@@ -47,6 +47,8 @@ Instrucciones específicas: `docker-compose.kafka.yml` (3 Zookeeper + 3 brokers)
 | `docker-compose.kafka-ui.yml` | `kafka-ui` (Provectus 0.7.2) en `127.0.0.1:8090`, con usuario y clave |
 | `kafka/kafka-admin.sh` | crear tópicos, describir, grupos y lag, retención, particiones, reset de offsets, mensajes y prueba de tolerancia a fallos |
 | `kafka/verificar-ep5.sh` | comprueba quórum, brokers, tópicos (3 × 3, ISR, configuración), DLT, grupos, Kafka UI y, con `GATEWAY` + `TOKEN_CLIENTE`, el cambio de estado de un pedido |
+| `kafka/desplegar-ep5-ec2.sh` | despliegue en la EC2: Kafka, Kafka UI, compilación y reinicio de los 4 servicios con las variables de EP1-EP4, y verificación |
+| `kafka/rutas-api-gateway-ep5.sh` | agrega las 3 rutas de EP5 al HTTP API con el authorizer JWT existente y suma PATCH al CORS (idempotente; `SIMULAR=1` para revisar) |
 
 ## Frontend
 
@@ -54,6 +56,18 @@ Vistas nuevas `/analitica` y `/kafka` (rol Admin), seguimiento automático del e
 en `/productos` (ver `frontend-pedidos360/README.md`). `proxy.conf.json` suma `/api/kafka` (8084) y `/api/analitica` (8085).
 
 ## Despliegue en la EC2
+
+Dos scripts lo automatizan (no se pudieron probar contra AWS: el laboratorio no estaba activo; el de rutas se probó en modo `SIMULAR=1`):
+
+```bash
+# En la EC2, dentro de backend-pedidos360, después de git pull (lee las variables de EP1-EP4 desde .env):
+bash kafka/desplegar-ep5-ec2.sh      # Kafka + Kafka UI, compila y reinicia los 4 servicios, y verifica
+
+# Desde un equipo con AWS CLI y credenciales vigentes del laboratorio:
+API_ID=<id del HTTP API> EC2_HOST=<ip de la EC2> bash kafka/rutas-api-gateway-ep5.sh
+```
+
+A mano equivale a:
 
 ```bash
 sudo docker compose -f docker-compose.kafka.yml up -d
