@@ -1,5 +1,6 @@
 package cl.duoc.pedidos360.common;
 
+import cl.duoc.pedidos360.kafka.PublicacionKafkaException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
 import org.slf4j.Logger;
@@ -15,7 +16,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.ResourceAccessException;
 
-/** Traduce excepciones a respuestas JSON coherentes (400, 403, 404, 409, 502, 500). */
+/** Traduce excepciones a respuestas JSON coherentes (400, 403, 404, 409, 502, 503, 500). */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -66,6 +67,17 @@ public class GlobalExceptionHandler {
   public ResponseEntity<ApiError> unreachable(ResourceAccessException ex, HttpServletRequest req) {
     log.error("Servicio remoto no disponible: {}", ex.getMessage());
     return build(HttpStatus.BAD_GATEWAY, "Un microservicio no está disponible: " + ex.getMessage(), req, List.of());
+  }
+
+  /**
+   * Kafka no confirmó el evento de inventario de la operación (crear producto, reponer stock): la transacción se
+   * deshizo, no se guardó nada y se puede reintentar. 503, nunca 500.
+   */
+  @ExceptionHandler(PublicacionKafkaException.class)
+  public ResponseEntity<ApiError> kafkaNoDisponible(PublicacionKafkaException ex, HttpServletRequest req) {
+    log.error("Kafka no disponible en {} {}: {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+    return build(HttpStatus.SERVICE_UNAVAILABLE,
+        ex.getMessage() + ". No se guardó ningún cambio; intente nuevamente en unos segundos", req, List.of());
   }
 
   @ExceptionHandler(Exception.class)

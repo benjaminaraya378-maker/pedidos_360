@@ -38,7 +38,10 @@ public class ProductoService {
     return ProductoResponse.de(buscar(id));
   }
 
-  /** Crea el producto y, después del commit, anuncia su stock inicial en Kafka (PRODUCTO_CREADO). */
+  /**
+   * Crea el producto y anuncia su stock inicial en Kafka (PRODUCTO_CREADO) antes del commit. Si Kafka no confirma el
+   * evento, el producto no se guarda (el controlador responde 503).
+   */
   public ProductoResponse crear(ProductoRequest req) {
     Producto p = new Producto();
     aplicar(p, req);

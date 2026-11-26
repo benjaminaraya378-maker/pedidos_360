@@ -24,9 +24,12 @@ spring:
       properties:
         enable.idempotence: true             # un reintento del productor no duplica ni desordena mensajes
         max.in.flight.requests.per.connection: 5
-        delivery.timeout.ms: 30000
+        # Tiempo total para que Kafka confirme o rechace un envío, reintentos incluidos. Menor que
+        # pedidos360.kafka.publicacion.espera-confirmacion-ms: el productor siempre responde antes de que se acabe la
+        # espera, así nunca se deshace un cambio cuyo evento igual llega a Kafka después
+        delivery.timeout.ms: 12000
         request.timeout.ms: 10000
-        max.block.ms: 5000
+        max.block.ms: 5000                   # sin metadata del tópico (Kafka caído al iniciar), send() falla a los 5 s
         linger.ms: 5
         compression.type: lz4
         # pedidoEvento se usa al reenviar al DLT un evento de pedido que no se pudo procesar
@@ -88,3 +91,8 @@ pedidos360:
       espera-inicial-ms: 1000
       multiplicador: 2.0
       espera-maxima-ms: 10000
+    publicacion:
+      # InventarioKafkaProducer publica los eventos de stock antes del commit y espera la confirmación del broker hasta
+      # este tiempo; si Kafka no confirma, la transacción se deshace (consumidor: reintento y DLT; HTTP: 503).
+      # Debe ser mayor que spring.kafka.producer.properties.delivery.timeout.ms
+      espera-confirmacion-ms: ${KAFKA_ESPERA_CONFIRMACION_MS:15000}

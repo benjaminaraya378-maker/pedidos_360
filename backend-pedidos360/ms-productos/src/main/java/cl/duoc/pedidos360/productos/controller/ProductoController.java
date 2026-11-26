@@ -24,7 +24,8 @@ import org.springframework.web.bind.annotation.RestController;
  *   <li>Lectura: cualquier usuario autenticado (scope Pedidos360.Read).</li>
  *   <li>Crear producto y reponer stock: rol Admin.</li>
  * </ul>
- * Crear y reponer publican un evento en el tópico de inventario de Kafka (PRODUCTO_CREADO, STOCK_REPUESTO).
+ * Crear y reponer publican un evento en el tópico de inventario de Kafka (PRODUCTO_CREADO, STOCK_REPUESTO) antes del
+ * commit. Si Kafka no lo confirma, no se guarda nada y se responde 503 (GlobalExceptionHandler).
  */
 @RestController
 @RequestMapping("/api/productos")
@@ -57,7 +58,7 @@ public class ProductoController {
     return ResponseEntity.created(URI.create("/api/productos/" + creado.id())).body(creado);
   }
 
-  /** Suma unidades al stock (200 · 400 · 404). Saca al producto de la alerta de stock bajo de la analítica. */
+  /** Suma unidades al stock (200 · 400 · 404 · 503). Saca al producto de la alerta de stock bajo de la analítica. */
   @PatchMapping("/{id}/stock")
   @PreAuthorize("hasRole('ADMIN')")
   public ProductoResponse reponerStock(@PathVariable Long id, @Valid @RequestBody ReposicionRequest req) {

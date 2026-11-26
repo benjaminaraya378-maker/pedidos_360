@@ -23,7 +23,7 @@ import java.time.Instant;
  * @param cantidad        unidades descontadas, solicitadas sin stock o repuestas
  * @param stockAnterior   stock antes del movimiento
  * @param stockActual     stock después del movimiento
- * @param umbralStockBajo bajo este valor el producto se considera con stock bajo
+ * @param umbralStockBajo con este stock o menos el producto se considera con stock bajo
  * @param stockBajo       stockActual <= umbralStockBajo
  * @param pedidoId        pedido que originó el movimiento (null en altas y reposiciones)
  * @param motivo          explicación legible del movimiento

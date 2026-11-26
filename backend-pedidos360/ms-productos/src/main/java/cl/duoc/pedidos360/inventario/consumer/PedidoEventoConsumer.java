@@ -21,7 +21,9 @@ import org.springframework.stereotype.Component;
  *
  * <p>El grupo es propio de ms-productos: ms-analitica lee el mismo tópico con otro grupo y recibe todos los eventos
  * por su cuenta. Dentro del grupo, 3 hilos (concurrency) se reparten las 3 particiones; si se levanta otra instancia
- * de ms-productos, Kafka redistribuye las particiones entre ambas. Los errores los maneja {@code KafkaConfig}.
+ * de ms-productos, Kafka redistribuye las particiones entre ambas. Los errores los maneja {@code KafkaConfig}: si
+ * Kafka no confirma los eventos de stock, {@code reservarStock} se deshace y lanza {@code PublicacionKafkaException};
+ * el offset no se confirma, el PEDIDO_CREADO se reintenta (1 s, 2 s, 4 s) y, si sigue fallando, va al DLT.
  */
 @Component
 public class PedidoEventoConsumer {

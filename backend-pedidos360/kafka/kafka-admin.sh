@@ -151,5 +151,5 @@ case "${1:-}" in
   reset) shift; cmd_reset "$@" ;;
   mensajes) shift; cmd_mensajes "$@" ;;
   tolerancia) cmd_tolerancia ;;
-  *) sed -n '2,22p' "$0"; exit 2 ;;
+  *) sed -n '2,18p' "$0"; exit 2 ;;
 esac

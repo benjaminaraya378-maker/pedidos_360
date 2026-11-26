@@ -4,6 +4,7 @@ import cl.duoc.pedidos360.analitica.service.AnaliticaService;
 import cl.duoc.pedidos360.analitica.service.AnaliticaService.Origen;
 import cl.duoc.pedidos360.kafka.EventoInvalidoException;
 import cl.duoc.pedidos360.kafka.KafkaTopicosProperties;
+import cl.duoc.pedidos360.kafka.PosicionesPrevias;
 import cl.duoc.pedidos360.kafka.evento.InventarioEvento;
 import cl.duoc.pedidos360.kafka.evento.PedidoEvento;
 import jakarta.validation.Valid;
@@ -33,7 +34,9 @@ import org.springframework.stereotype.Component;
  *   <li>Cada mensaje llega como su DTO según el header {@code __TypeId__} y Spring lo envía al {@code @KafkaHandler}
  *       del tipo que corresponde. Un tipo desconocido se rechaza y va al DLT del tópico de origen.</li>
  *   <li>Las métricas viven en memoria: al arrancar, si {@code reconstruir-al-iniciar} es true, vuelve al inicio de
- *       cada partición y las reconstruye con los eventos que Kafka aún retiene.</li>
+ *       cada partición y las reconstruye con los eventos que Kafka aún retiene. Antes de volver al inicio guarda la
+ *       posición que el grupo tenía en cada partición ({@link PosicionesPrevias}), para que los eventos defectuosos
+ *       que ya se mandaron al DLT en una ejecución anterior no se vuelvan a publicar al releerlos.</li>
  * </ul>
  * La lógica de las métricas está en {@link AnaliticaService}; esta clase solo conoce la mensajería.
  */
@@ -51,10 +54,12 @@ public class AnaliticaConsumer implements ConsumerSeekAware {
   private final KafkaTopicosProperties props;
   /** Particiones que ya se releyeron desde el inicio en esta ejecución (un rebalanceo posterior no las relee). */
   private final Set<TopicPartition> reconstruidas = ConcurrentHashMap.newKeySet();
+  private final PosicionesPrevias previas;
 
-  public AnaliticaConsumer(AnaliticaService analitica, KafkaTopicosProperties props) {
+  public AnaliticaConsumer(AnaliticaService analitica, KafkaTopicosProperties props, PosicionesPrevias previas) {
     this.analitica = analitica;
     this.props = props;
+    this.previas = previas;
   }
 
   @KafkaHandler
@@ -79,6 +84,11 @@ public class AnaliticaConsumer implements ConsumerSeekAware {
     throw new EventoInvalidoException("Tipo de evento no reconocido por la analítica: " + valor.getClass().getName());
   }
 
+  /**
+   * {@code asignadas} trae la posición de cada partición antes de cualquier seek: el offset que el grupo tenía
+   * confirmado o, si no hay ninguno, el inicio de la partición ({@code auto-offset-reset: earliest}), con lo que nada
+   * queda antes. Se guarda antes de volver al inicio para que el manejador de errores distinga lo ya procesado.
+   */
   @Override
   public void onPartitionsAssigned(Map<TopicPartition, Long> asignadas, ConsumerSeekCallback callback) {
     if (!props.reconstruirAlIniciar()) {
@@ -86,7 +96,9 @@ public class AnaliticaConsumer implements ConsumerSeekAware {
     }
     List<TopicPartition> nuevas = asignadas.keySet().stream().filter(reconstruidas::add).toList();
     if (!nuevas.isEmpty()) {
-      log.info("Reconstruyendo métricas: lectura desde el inicio de {}", nuevas);
+      nuevas.forEach(particion -> previas.recordar(particion, asignadas.get(particion)));
+      log.info("Reconstruyendo métricas: lectura desde el inicio de {} | posición previa del grupo: {}", nuevas,
+          nuevas.stream().map(asignadas::get).toList());
       callback.seekToBeginning(nuevas);
     }
   }

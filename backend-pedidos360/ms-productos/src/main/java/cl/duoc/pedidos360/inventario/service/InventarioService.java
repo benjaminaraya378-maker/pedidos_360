@@ -27,7 +27,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Lógica de inventario (sin Kafka): descontar el stock de un pedido y reponer stock. Cada movimiento se anuncia con un
- * evento de Spring que, después del commit, {@code InventarioKafkaProducer} publica en el tópico de inventario.
+ * evento de Spring que {@code InventarioKafkaProducer} publica en el tópico de inventario justo antes del commit,
+ * esperando la confirmación del broker: si Kafka no la da, la transacción completa se deshace y el error se propaga.
  */
 @Service
 public class InventarioService {
@@ -56,7 +57,9 @@ public class InventarioService {
    * STOCK_DESCONTADO por producto. ms-productos ya validó el stock al crear el pedido, pero dos pedidos simultáneos
    * pueden pasar esa validación y aquí, con los productos bloqueados, solo uno de los dos lo obtiene.
    *
-   * <p>Idempotente: un evento ya procesado (entrega repetida de Kafka) no vuelve a descontar.
+   * <p>Idempotente: un evento ya procesado (entrega repetida de Kafka) no vuelve a descontar. Si Kafka no confirma
+   * los eventos de stock, se deshace todo, también el registro del evento procesado: el reintento que hace el manejador
+   * de errores de Kafka vuelve a descontar en vez de descartarse como DUPLICADO.
    */
   @Transactional
   public Resultado reservarStock(PedidoEvento pedido) {
@@ -117,7 +120,10 @@ public class InventarioService {
     return faltantes.isEmpty() ? Resultado.DESCONTADO : Resultado.INSUFICIENTE;
   }
 
-  /** Suma unidades al stock de un producto (rol Admin) y lo anuncia como STOCK_REPUESTO. */
+  /**
+   * Suma unidades al stock de un producto (rol Admin) y lo anuncia como STOCK_REPUESTO. Si Kafka no confirma el
+   * evento, la reposición no se guarda (el controlador responde 503).
+   */
   @Transactional
   public ProductoResponse reponer(Long productoId, int cantidad) {
     Producto p = productos.findByIdForUpdate(productoId)

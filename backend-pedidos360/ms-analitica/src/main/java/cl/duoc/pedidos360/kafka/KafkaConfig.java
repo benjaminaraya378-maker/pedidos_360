@@ -1,5 +1,6 @@
 package cl.duoc.pedidos360.kafka;
 
+import cl.duoc.pedidos360.kafka.KafkaTopicosProperties.Dlt;
 import cl.duoc.pedidos360.kafka.KafkaTopicosProperties.Reintentos;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -17,6 +18,7 @@ import org.springframework.kafka.annotation.KafkaListenerConfigurer;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.core.ProducerFactory;
+import org.springframework.kafka.listener.ConsumerRecordRecoverer;
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.kafka.support.ExponentialBackOffWithMaxRetries;
@@ -48,10 +50,12 @@ public class KafkaConfig {
   /**
    * Misma política de error que ms-pedidos y ms-productos: reintentos con espera exponencial ante errores
    * recuperables; JSON ilegible, payload inválido o tipo de evento desconocido van directo al DLT del tópico de origen.
-   * Un evento defectuoso nunca detiene la analítica.
+   * Un evento defectuoso nunca detiene la analítica, y la relectura al reiniciar no duplica el DLT (ver
+   * {@link #recuperador}).
    */
   @Bean
-  DefaultErrorHandler kafkaErrorHandler(KafkaTemplate<Object, Object> kafkaTemplate, KafkaTopicosProperties props) {
+  DefaultErrorHandler kafkaErrorHandler(KafkaTemplate<Object, Object> kafkaTemplate, KafkaTopicosProperties props,
+                                        PosicionesPrevias previas) {
     DeadLetterPublishingRecoverer publicadorDlt = new DeadLetterPublishingRecoverer(kafkaTemplate,
         (registro, error) -> new TopicPartition(props.dlt().de(registro.topic()), -1));
 
@@ -61,16 +65,36 @@ public class KafkaConfig {
     espera.setMultiplier(r.multiplicador());
     espera.setMaxInterval(r.esperaMaximaMs());
 
-    DefaultErrorHandler manejador = new DefaultErrorHandler((registro, error) -> {
-      log.error("Evento enviado a '{}' | origen {}-{}@{} clave={} | motivo: {}", props.dlt().de(registro.topic()),
-          registro.topic(), registro.partition(), registro.offset(), registro.key(), causa(error));
-      publicadorDlt.accept(registro, error);
-    }, espera);
+    DefaultErrorHandler manejador = new DefaultErrorHandler(recuperador(publicadorDlt, previas, props.dlt()), espera);
     manejador.addNotRetryableExceptions(EventoInvalidoException.class, MethodArgumentNotValidException.class);
     manejador.setRetryListeners((registro, error, intento) ->
         log.warn("Intento {} de {} fallido para {}-{}@{} clave={}: {}", intento, r.maximo() + 1, registro.topic(),
             registro.partition(), registro.offset(), registro.key(), causa(error)));
     return manejador;
+  }
+
+  /**
+   * Destino final de un evento que no se pudo procesar: el DLT de su tópico de origen.
+   *
+   * <p>Excepción: al arrancar, la analítica relee cada partición desde el inicio para reconstruir sus métricas, y los
+   * eventos defectuosos que ya mandó al DLT en una ejecución anterior vuelven a fallar. Si el offset del evento quedó
+   * antes de la posición que el grupo tenía al recibir la partición ({@link PosicionesPrevias}), ya se había procesado
+   * antes de este reinicio: solo se deja en el log y no se publica de nuevo. Los eventos nuevos (offset igual o mayor
+   * a esa posición, o partición sin posición previa) van al DLT como siempre.
+   */
+  static ConsumerRecordRecoverer recuperador(ConsumerRecordRecoverer publicadorDlt, PosicionesPrevias previas,
+                                             Dlt dlt) {
+    return (registro, error) -> {
+      if (previas.yaProcesadoAntes(registro)) {
+        log.warn("Evento ya enviado a '{}' antes de este reinicio; no se vuelve a publicar | origen {}-{}@{} "
+                + "(posición previa del grupo: {}) clave={} | motivo: {}", dlt.de(registro.topic()), registro.topic(),
+            registro.partition(), registro.offset(), previas.de(registro), registro.key(), causa(error));
+        return;
+      }
+      log.error("Evento enviado a '{}' | origen {}-{}@{} clave={} | motivo: {}", dlt.de(registro.topic()),
+          registro.topic(), registro.partition(), registro.offset(), registro.key(), causa(error));
+      publicadorDlt.accept(registro, error);
+    };
   }
 
   /** Activa {@code @Valid} en los parámetros {@code @Payload} de los {@code @KafkaHandler}. */
