@@ -125,7 +125,7 @@ que en EP4); los servicios validan firma, emisor, audiencia, rol y scope igual q
   con lag 0 y las métricas completas.
 - Con `kafka3` detenido: el líder de su partición pasó a otro broker, el ISR quedó en 2 y un pedido nuevo se completó igual;
   al levantarlo volvió al ISR.
-- 25-nov, frontend en `npm run demo-local` (capturas en el informe, figuras 43 a 49): un pedido hecho desde la interfaz se
+- 25-nov, frontend en `npm run demo-local` (capturas en la sección 12 del informe): un pedido hecho desde la interfaz se
   ve en CREADO y pasa solo a EN_PREPARACION; una carrera por los últimos monitores deja uno cancelado con su motivo; la
   analítica, la reposición de stock y la vista Kafka (grupo EMPTY con lag 9 con la analítica detenida, y lag 0 al volver)
   funcionan con el IDaaS local. `ng build` en producción no incluye el código del modo demo.

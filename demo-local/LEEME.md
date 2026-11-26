@@ -64,23 +64,37 @@ GATEWAY=http://localhost:8082 TOKEN_CLIENTE=$(cat ../demo-local/cliente.jwt) bas
 bash rabbitmq/verificar-ep4.sh                                                               # RabbitMQ de EP4 intacto
 ```
 
-## 6. Guion de la demo (lámina 13, unos 3 minutos)
+## 6. Guion de la demo (lámina 15, unos 3 minutos y medio)
 
 1. `docker ps --format "table {{.Names}}\t{{.Status}}"` → 3 Zookeeper, 3 brokers, Kafka UI y los 2 nodos de RabbitMQ
    *healthy* / *Up*.
-2. Kafka UI → *Brokers* (3 brokers, controlador, URP 0) → *Topics* (los 2 tópicos y sus DLT, 3 particiones y 3
+2. Consola de RabbitMQ en http://localhost:15672 (guest / guest): *Overview* → *Nodes* (rabbit@rabbitmq1 y
+   rabbit@rabbitmq2), *Queues* (3 colas con DLX/DLK y sus 3 DLQ) y *Exchanges* (`pedidos360.pedidos.exchange` topic y
+   `pedidos360.pedidos.dlx` direct).
+3. Kafka UI → *Brokers* (3 brokers, controlador, URP 0) → *Topics* (los 2 tópicos y sus DLT, 3 particiones y 3
    réplicas) → `pedidos360.inventario` → *Settings* (`cleanup.policy=compact`, `min.compaction.lag.ms`).
-3. Frontend como Cliente: *Catálogo* → «Agregar al pedido» → *Pedidos* → «Confirmar pedido». El pedido aparece en
+4. El JWT, desde la raíz del repositorio (rechaza inválidos, acepta válidos):
+   ```bash
+   curl -s -o /dev/null -w "sin token: %{http_code}\n" http://localhost:8084/api/kafka/topics
+   curl -s -o /dev/null -w "Cliente: %{http_code}\n" -H "Authorization: Bearer $(cat demo-local/cliente.jwt)" http://localhost:8084/api/kafka/topics
+   curl -s -o /dev/null -w "Admin: %{http_code}\n" -H "Authorization: Bearer $(cat demo-local/admin.jwt)" http://localhost:8084/api/kafka/topics
+   ```
+   → 401, 403 y 200.
+
+Luego, en el frontend y en Kafka UI:
+
+5. Frontend como Cliente: *Catálogo* → «Agregar al pedido» → *Pedidos* → «Confirmar pedido». El pedido aparece en
    CREADO y, sin recargar, pasa a EN_PREPARACION.
-4. Kafka UI → *Messages* del tópico de pedidos: el evento con su clave, partición, offset y JSON.
-5. Frontend como Admin → *Analítica*: el pedido en «Últimos eventos» con tópico, partición y offset.
-6. Detener la analítica (cerrar su proceso java o `taskkill` del PID que escucha en 8085), crear 2 o 3 pedidos y abrir
+6. Kafka UI → *Messages* del tópico de pedidos: el evento con su clave, partición, offset y JSON.
+7. Frontend como Admin → *Analítica*: el pedido en «Últimos eventos» con tópico, partición y offset.
+8. Detener la analítica (cerrar su proceso java o `taskkill` del PID que escucha en 8085), crear 2 o 3 pedidos y abrir
    *Kafka* → «Detalle» del grupo `pedidos360-analitica`: EMPTY y lag por partición. Lo mismo en Kafka UI → *Consumers*
    o con `bash kafka/kafka-admin.sh grupo pedidos360-analitica` (desde backend-pedidos360). Para no esperar en vivo,
    relanzarla con `bash demo-local/servicios.sh ms-analitica` mientras se muestra Kafka UI: el grupo vuelve a STABLE
    y el lag a 0.
 
-Si algo falla en vivo, las láminas 8, 9 y 11 y las figuras 43 a 49 del informe muestran los mismos pasos.
+Si algo falla en vivo, las láminas 3, 9, 10 y 12 y la sección 12 del informe muestran los mismos pasos con capturas
+reales. Si el tiempo aprieta, se puede saltar el paso del evento en Kafka UI (*Messages*): ya aparece en la lámina 10.
 
 ## 7. Apagar
 
