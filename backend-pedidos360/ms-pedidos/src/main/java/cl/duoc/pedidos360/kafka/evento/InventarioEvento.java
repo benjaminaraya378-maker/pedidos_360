@@ -2,6 +2,7 @@ package cl.duoc.pedidos360.kafka.evento;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
@@ -29,7 +30,7 @@ import java.time.Instant;
  * @param motivo          explicación legible del movimiento
  */
 public record InventarioEvento(
-    @NotBlank String eventoId,
+    @NotBlank @Size(max = 36) String eventoId,
     @NotNull TipoEventoInventario tipo,
     @NotNull @Positive Integer version,
     @NotNull @JsonFormat(shape = JsonFormat.Shape.STRING) Instant fecha,

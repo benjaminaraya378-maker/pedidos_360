@@ -40,7 +40,9 @@ spring:
       properties:
         enable.idempotence: true             # un reintento del productor no duplica ni desordena mensajes
         max.in.flight.requests.per.connection: 5
-        delivery.timeout.ms: 30000           # tiempo total para entregar un mensaje, reintentos incluidos
+        # Tiempo total para que Kafka confirme o rechace un envío, reintentos incluidos. Menor que
+        # pedidos360.kafka.publicacion.espera-confirmacion-ms: el productor siempre responde antes de que se acabe la espera
+        delivery.timeout.ms: 12000
         request.timeout.ms: 10000
         max.block.ms: 5000                   # si Kafka no responde, send() no retiene la petición HTTP más de 5 s
         linger.ms: 5                         # espera 5 ms para agrupar mensajes en un mismo lote
@@ -123,6 +125,11 @@ pedidos360:
       espera-inicial-ms: 1000         # 1 s, 2 s, 4 s
       multiplicador: 2.0
       espera-maxima-ms: 10000
+    publicacion:
+      # PEDIDO_CONFIRMADO / PEDIDO_CANCELADO se publican antes del commit y se espera la confirmación del broker hasta
+      # este tiempo; si Kafka no confirma, se deshace el cambio de estado y el evento de inventario se reintenta.
+      # Debe ser mayor que spring.kafka.producer.properties.delivery.timeout.ms
+      espera-confirmacion-ms: ${KAFKA_ESPERA_CONFIRMACION_MS:15000}
   comprobantes:
     # Carpeta donde se escriben los tickets generados por el consumidor de comprobantes
     directorio: ${COMPROBANTES_DIR:${java.io.tmpdir}/pedidos360-comprobantes}

@@ -3,6 +3,7 @@ package cl.duoc.pedidos360.kafka.evento;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -30,7 +31,7 @@ import java.util.UUID;
  * @param items     productos y cantidades: el inventario los necesita para descontar stock
  */
 public record PedidoEvento(
-    @NotBlank String eventoId,
+    @NotBlank @Size(max = 36) String eventoId,
     @NotNull TipoEventoPedido tipo,
     @NotNull @Positive Integer version,
     @NotNull @JsonFormat(shape = JsonFormat.Shape.STRING) Instant fecha,

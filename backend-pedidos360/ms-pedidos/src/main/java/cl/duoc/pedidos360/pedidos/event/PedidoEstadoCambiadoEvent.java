@@ -6,8 +6,8 @@ import java.math.BigDecimal;
 import java.util.List;
 
 /**
- * Evento de Spring "el pedido cambió de estado". Lo emite {@code EstadoPedidoService} y, después del commit,
- * {@code PedidoKafkaProducer} lo publica en Kafka como PEDIDO_CONFIRMADO o PEDIDO_CANCELADO.
+ * Evento de Spring "el pedido cambió de estado". Lo emite {@code EstadoPedidoService} y, justo antes del commit,
+ * {@code PedidoKafkaProducer} lo publica en Kafka como PEDIDO_CONFIRMADO o PEDIDO_CANCELADO y espera la confirmación.
  */
 public record PedidoEstadoCambiadoEvent(
     Long pedidoId,

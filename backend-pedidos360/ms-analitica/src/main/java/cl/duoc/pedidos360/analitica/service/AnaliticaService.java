@@ -66,7 +66,7 @@ public class AnaliticaService {
   private volatile Instant ultimoEvento;
 
   public void registrarPedido(PedidoEvento e, Origen origen) {
-    if (!primeraVez(e.eventoId())) {
+    if (yaProcesado(e.eventoId())) {
       return;
     }
     pedidos.compute(e.pedidoId(), (id, actual) -> new PedidoVista(id, estadoDe(e),
@@ -79,10 +79,11 @@ public class AnaliticaService {
       default -> "Pedido #" + e.pedidoId() + ": evento " + e.tipo();
     };
     registrarReciente(e.eventoId(), origen, String.valueOf(e.pedidoId()), e.tipo().name(), descripcion, e.fecha());
+    marcarProcesado(e.eventoId());
   }
 
   public void registrarInventario(InventarioEvento e, Origen origen) {
-    if (!primeraVez(e.eventoId())) {
+    if (yaProcesado(e.eventoId())) {
       return;
     }
     StockProducto nuevo = new StockProducto(e.productoId(), e.nombreProducto(), e.stockActual(), e.umbralStockBajo(),
@@ -104,6 +105,7 @@ public class AnaliticaService {
     }
     registrarReciente(e.eventoId(), origen, String.valueOf(e.productoId()), e.tipo().name(),
         e.nombreProducto() + ": " + detalle + (e.stockBajo() ? " · STOCK BAJO" : ""), e.fecha());
+    marcarProcesado(e.eventoId());
   }
 
   public ResumenAnalitica resumen() {
@@ -155,12 +157,19 @@ public class AnaliticaService {
     return stock.values().stream().sorted(Comparator.comparing(StockProducto::nombre)).toList();
   }
 
-  private synchronized boolean primeraVez(String eventoId) {
-    if (vistos.putIfAbsent(eventoId, Boolean.TRUE) != null) {
-      return false;
+  /** Idempotencia: un evento ya procesado (entrega repetida o relectura) no vuelve a sumar. */
+  private synchronized boolean yaProcesado(String eventoId) {
+    return vistos.containsKey(eventoId);
+  }
+
+  /**
+   * Se marca al final, cuando las métricas ya se actualizaron: si algo falla a mitad de camino, el reintento del
+   * manejador de errores lo vuelve a procesar en vez de descartarlo como repetido.
+   */
+  private synchronized void marcarProcesado(String eventoId) {
+    if (vistos.putIfAbsent(eventoId, Boolean.TRUE) == null) {
+      eventosProcesados.incrementAndGet();
     }
-    eventosProcesados.incrementAndGet();
-    return true;
   }
 
   private synchronized void registrarReciente(String eventoId, Origen origen, String clave, String tipo,

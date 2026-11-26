@@ -91,9 +91,9 @@ public class KafkaConfig {
             registro.partition(), registro.offset(), previas.de(registro), registro.key(), causa(error));
         return;
       }
+      publicadorDlt.accept(registro, error);   // espera la confirmación; si falla, el evento se vuelve a intentar
       log.error("Evento enviado a '{}' | origen {}-{}@{} clave={} | motivo: {}", dlt.de(registro.topic()),
           registro.topic(), registro.partition(), registro.offset(), registro.key(), causa(error));
-      publicadorDlt.accept(registro, error);
     };
   }
 

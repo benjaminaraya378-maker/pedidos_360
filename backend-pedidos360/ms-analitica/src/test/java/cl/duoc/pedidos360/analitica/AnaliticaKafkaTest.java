@@ -1,6 +1,8 @@
 package cl.duoc.pedidos360.analitica;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 
 import cl.duoc.pedidos360.analitica.dto.ResumenAnalitica;
 import cl.duoc.pedidos360.analitica.service.AnaliticaService;
@@ -15,6 +17,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -26,7 +29,10 @@ import org.apache.kafka.common.serialization.ByteArrayDeserializer;
 import org.apache.kafka.common.serialization.ByteArraySerializer;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
@@ -36,6 +42,7 @@ import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.kafka.test.EmbeddedKafkaBroker;
 import org.springframework.kafka.test.context.EmbeddedKafka;
 import org.springframework.kafka.test.utils.KafkaTestUtils;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 
 /**
  * Prueba de punta a punta del consumidor de la analítica contra un broker Kafka embebido: eventos tipados de los dos
@@ -49,18 +56,21 @@ import org.springframework.kafka.test.utils.KafkaTestUtils;
     partitions = 3,
     topics = {"pedidos360.pedidos", "pedidos360.inventario", "pedidos360.pedidos.dlt", "pedidos360.inventario.dlt"},
     bootstrapServersProperty = "spring.kafka.bootstrap-servers")
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)   // comparten el contexto: el orden fija los conteos
 class AnaliticaKafkaTest {
 
   @Autowired
   private KafkaTemplate<Object, Object> kafkaTemplate;
 
-  @Autowired
+  /** Espía sobre el servicio real: permite simular un fallo recuperable sin cambiar el código de producción. */
+  @MockitoSpyBean
   private AnaliticaService analitica;
 
   @Autowired
   private EmbeddedKafkaBroker broker;
 
   @Test
+  @Order(1)
   void procesaAmbosTopicosYMandaAlDltLoQueNoPuedeProcesar() throws Exception {
     // 1. Eventos válidos de los dos tópicos: llegan a su @KafkaHandler como DTO
     kafkaTemplate.send("pedidos360.pedidos", "1", pedido(1L, 25990)).get();
@@ -94,6 +104,28 @@ class AnaliticaKafkaTest {
     // El mensaje ilegible se conserva tal cual (bytes originales), para poder revisarlo
     assertThat(dlt).anySatisfy(r ->
         assertThat(new String(r.value(), StandardCharsets.UTF_8)).isEqualTo("{esto no es json"));
+  }
+
+  @Test
+  @Order(2)
+  void unErrorRecuperableSeReintentaConEsperaYElEventoNoSePierde() throws Exception {
+    // La "base de datos" falla las dos primeras veces que llega el pedido 77 y a la tercera responde
+    AtomicInteger intentos = new AtomicInteger();
+    doAnswer(inv -> {
+      PedidoEvento e = inv.getArgument(0);
+      if (e.pedidoId() == 77L && intentos.incrementAndGet() <= 2) {
+        throw new IllegalStateException("base de datos no disponible (simulado)");
+      }
+      return inv.callRealMethod();
+    }).when(analitica).registrarPedido(any(), any());
+
+    kafkaTemplate.send("pedidos360.pedidos", "77", pedido(77L, 5000)).get();
+
+    // DefaultErrorHandler: intento 1 falla, reintento 1 falla, reintento 2 procesa. El evento llega a las métricas
+    // una sola vez y no va al DLT, porque se recuperó antes de agotar los 3 reintentos.
+    ResumenAnalitica resumen = esperar(r -> r.ultimosEventos().stream().anyMatch(ev -> "77".equals(ev.clave())));
+    assertThat(intentos.get()).isEqualTo(3);
+    assertThat(resumen.ultimosEventos()).filteredOn(ev -> "77".equals(ev.clave())).hasSize(1);
   }
 
   private ResumenAnalitica esperar(Predicate<ResumenAnalitica> condicion) throws InterruptedException {
