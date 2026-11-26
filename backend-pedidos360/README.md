@@ -130,7 +130,8 @@ docker compose -f docker-compose.kafka.yml up -d
 docker compose -f docker-compose.kafka.yml ps          # 6 servicios healthy
 docker compose -f docker-compose.kafka-ui.yml up -d    # http://localhost:8090
 bash kafka/kafka-admin.sh cluster                       # quórum de Zookeeper, brokers y controlador
-bash kafka/verificar-ep5.sh                             # comprueba tópicos, réplicas, ISR, configuración y grupos
+bash kafka/verificar-ep5.sh                             # con ms-productos, ms-pedidos y ms-analitica arriba (crean los
+                                                        # tópicos y los grupos): tópicos, réplicas, ISR, configuración y grupos
 ```
 
 ### Tópicos (3 particiones y 3 réplicas cada uno)
@@ -169,7 +170,8 @@ POST /api/pedidos ─► ms-pedidos ──PEDIDO_CREADO──► pedidos360.pedi
 | `pedidos360-analitica` | `ms-analitica` (`analitica/consumer/AnaliticaConsumer`) | pedidos e inventario | Métricas, alertas de stock bajo y últimos eventos |
 
 Cada grupo tiene su propio offset: los tres reciben todos los eventos que les interesan. Dentro de un grupo,
-`concurrency: 3` pone 3 hilos (uno por partición); si se levanta otra instancia del mismo servicio, Kafka reparte las
+`concurrency: 3` pone 3 hilos (en inventario y estado-pedidos, uno por partición; en analítica cada hilo toma una
+partición de cada tópico, 2 en total); si se levanta otra instancia del mismo servicio, Kafka reparte las
 particiones entre ambas (`CooperativeStickyAssignor`: los demás consumidores siguen trabajando durante el rebalanceo).
 
 ### Contratos (DTO) y serialización
@@ -190,6 +192,8 @@ propia clase (`spring.json.type.mapping`). Un tipo de evento nuevo se lee como `
 | Payload que no cumple el contrato (`@Valid`: id negativo, sin ítems...) | Al DLT sin reintentos |
 | Evento imposible de procesar (`EventoInvalidoException`, p. ej. pedido inexistente) | Al DLT sin reintentos |
 | Error recuperable (p. ej. base de datos) | Se reintenta con espera exponencial 1 s, 2 s, 4 s; agotados, al DLT |
+| Kafka no confirma el resultado del inventario (`PublicacionKafkaException`) | `InventarioKafkaProducer` publica antes del commit y espera la confirmación: se deshace el descuento y el registro del evento, se reintenta y, agotado, al DLT. Por HTTP (crear producto, reponer stock): 503 |
+| Relectura de `ms-analitica` al arrancar | Lo que ya se había mandado al DLT antes del reinicio no se vuelve a publicar (`PosicionesPrevias`) |
 
 Cada reintento y cada envío al DLT quedan en el log con tópico, partición, offset, clave y causa. En el DLT, Kafka agrega
 headers con el tópico, partición, offset y grupo de origen y la excepción. Un evento malo nunca detiene la partición.
@@ -208,7 +212,7 @@ una entrega repetida no descuenta dos veces; y `ms-pedidos` solo cambia pedidos 
 | POST | `/api/kafka/topics/{nombre}/partitions` | `{total}` (solo aumentar) | 200 · 400 · 404 |
 | DELETE | `/api/kafka/topics/{nombre}` | — (los 4 tópicos del sistema están protegidos) | 204 · 404 · 409 |
 | GET | `/api/kafka/consumer-groups` | — | 200 `[{grupo, estado, miembros, lagTotal}]` · 503 |
-| GET | `/api/kafka/consumer-groups/{grupo}` | — | 200 miembros, particiones asignadas, offset confirmado, offset final y lag · 404 |
+| GET | `/api/kafka/consumer-groups/{grupo}` | — | 200 miembros, particiones asignadas, offset confirmado, offset final y lag · 400 · 404 |
 | POST | `/api/kafka/consumer-groups/{grupo}/offsets` | `{topico, estrategia: INICIO\|FIN\|FECHA\|OFFSET, fecha?, offset?, particion?}` | 200 · 400 · 404 · 409 (grupo activo) |
 | DELETE | `/api/kafka/consumer-groups/{grupo}` | — | 204 · 404 · 409 (grupo activo) |
 
@@ -229,9 +233,18 @@ stock de cada producto). Procesar es idempotente (por `eventoId` y reemplazando 
 
 ### Pruebas
 
-`mvn test` en cada servicio: `ms-pedidos` (`EstadoPedidoServiceTest`), `ms-productos` (`InventarioServiceTest`),
-`ms-kafka-admin` (`ConfiguracionesTopicoTest`) y `ms-analitica` (`AnaliticaKafkaTest`, con un broker Kafka embebido:
-eventos de los dos tópicos, JSON ilegible y payload inválido al DLT, y la partición sigue después del error).
+`mvn test` en cada servicio (47 pruebas en total): `ms-pedidos` (`EstadoPedidoServiceTest`), `ms-productos`
+(`InventarioServiceTest`, `InventarioKafkaProducerTest`, `PublicacionAntesDelCommitTest`: rollback cuando Kafka no confirma,
+`ProductoControllerTest`: 503), `ms-kafka-admin` (`ConfiguracionesTopicoTest`), `ms-analitica` (`AnaliticaKafkaTest`, con
+un broker Kafka embebido: eventos de los dos tópicos, JSON ilegible y payload inválido al DLT, y la partición sigue después
+del error; `PosicionesPreviasTest`), `bff-pedidos360` (`SeguridadJwtTest`: roles, scopes y audiencia del JWT) y
+`ms-rabbitmq-admin` (`QueueRequestTest`: reglas de nombres y dead letter de una cola).
+
+## Ejecutar en local, sin AWS (demo)
+
+Todo el sistema en un PC con Docker, Java 21 y Node, sin la cuenta de AWS ni el tenant de Entra: un IDaaS local de
+prueba firma los JWT (mismos claims) y publica su JWKS, y los servicios lo validan igual que a Entra. Pasos, arranque de
+los servicios y guion de la demo en `../demo-local/LEEME.md`.
 
 ## Ejecutar / desplegar en EC2
 
