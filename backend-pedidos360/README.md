@@ -192,7 +192,9 @@ propia clase (`spring.json.type.mapping`). Un tipo de evento nuevo se lee como `
 | Payload que no cumple el contrato (`@Valid`: id negativo, sin ítems...) | Al DLT sin reintentos |
 | Evento imposible de procesar (`EventoInvalidoException`, p. ej. pedido inexistente) | Al DLT sin reintentos |
 | Error recuperable (p. ej. base de datos) | Se reintenta con espera exponencial 1 s, 2 s, 4 s; agotados, al DLT |
-| Kafka no confirma un evento que el consumidor publica (`PublicacionKafkaException`) | `InventarioKafkaProducer` (STOCK_*) y `PedidoKafkaProducer` (PEDIDO_CONFIRMADO/CANCELADO) publican antes del commit y esperan la confirmación: se deshace el descuento o el cambio de estado, el evento de origen se reintenta y, agotado, va al DLT. Por HTTP (crear producto, reponer stock): 503. `PEDIDO_CREADO` (petición HTTP) se publica después del commit |
+| Kafka no confirma un evento que el consumidor publica (`PublicacionKafkaException`) | `InventarioKafkaProducer` (STOCK_*) y `PedidoKafkaProducer` (PEDIDO_CONFIRMADO/CANCELADO) publican antes del commit y esperan la confirmación: se deshace el descuento o el cambio de estado, el evento de origen se reintenta y, agotado, va al DLT. Por HTTP (crear producto, reponer stock): 503 |
+| Kafka caído al crear un pedido (petición HTTP) | `PEDIDO_CREADO` pasa por el outbox (`OutboxKafka`): se guarda en `eventos_kafka_pendientes` en la misma transacción que el pedido, el pedido responde 201 igual, y un relé (`@Scheduled`, cada 2 s) lo publica cuando Kafka vuelve; la fila guarda los intentos y el último error |
+| Mensajes en un DLT, ya corregida la causa | `ms-kafka-admin` los muestra (`GET /api/kafka/dlt/{topicoDlt}`) y los reinyecta en su tópico de origen (`POST .../reprocesar`), confirmando el avance solo después de que Kafka acepta cada uno |
 | Relectura de `ms-analitica` al arrancar | Lo que ya se había mandado al DLT antes del reinicio no se vuelve a publicar (`PosicionesPrevias`); un evento se marca como procesado solo al terminar, así un reintento no se descarta |
 
 Cada reintento y cada envío al DLT quedan en el log con tópico, partición, offset, clave y causa. En el DLT, Kafka agrega
@@ -215,6 +217,8 @@ una entrega repetida no descuenta dos veces; y `ms-pedidos` solo cambia pedidos 
 | GET | `/api/kafka/consumer-groups/{grupo}` | — | 200 miembros, particiones asignadas, offset confirmado, offset final y lag · 400 · 404 |
 | POST | `/api/kafka/consumer-groups/{grupo}/offsets` | `{topico, estrategia: INICIO\|FIN\|FECHA\|OFFSET, fecha?, offset?, particion?}` | 200 · 400 · 404 · 409 (grupo activo) |
 | DELETE | `/api/kafka/consumer-groups/{grupo}` | — | 204 · 404 · 409 (grupo activo) |
+| GET | `/api/kafka/dlt/{topicoDlt}` | `?max=20` (1 a 100) | 200 pendientes por partición y los primeros mensajes (origen, grupo que falló, excepción, valor), sin consumirlos · 400 · 404 · 503 |
+| POST | `/api/kafka/dlt/{topicoDlt}/reprocesar` | `{max}` (1 a 100) | 200 `{reinyectados, pendientes, detalle}` · 400 (no termina en `.dlt`) · 404 · 409 (tópico de origen inexistente o reproceso en curso) · 503 |
 
 Parámetros de tópico permitidos (los demás se rechazan con 400): `cleanup.policy`, `retention.ms`, `retention.bytes`,
 `min.insync.replicas` (no mayor que las réplicas), `segment.ms`, `segment.bytes`, `max.message.bytes`, `compression.type`,
@@ -233,9 +237,11 @@ stock de cada producto). Procesar es idempotente (por `eventoId` y reemplazando 
 
 ### Pruebas
 
-`mvn test` en cada servicio (56 pruebas en total): `ms-pedidos` (`EstadoPedidoServiceTest`, `PedidoKafkaProducerTest`), `ms-productos`
+`mvn test` en cada servicio (87 pruebas en total): `ms-pedidos` (`EstadoPedidoServiceTest`, `PedidoKafkaProducerTest`,
+`OutboxKafkaTest`: el evento queda en la tabla si Kafka no confirma y el relé lo publica después), `ms-productos`
 (`InventarioServiceTest`, `InventarioKafkaProducerTest`, `PublicacionAntesDelCommitTest`: rollback cuando Kafka no confirma,
-`ProductoControllerTest`: 503), `ms-kafka-admin` (`ConfiguracionesTopicoTest`), `ms-analitica` (`AnaliticaKafkaTest`, con
+`ProductoControllerTest`: 503), `ms-kafka-admin` (`ConfiguracionesTopicoTest`, `DltServiceTest` y `ReglasDltTest`: reproceso
+sin duplicar ni saltarse mensajes, `KafkaAdminControllerDltTest`: 400/404/405/503), `ms-analitica` (`AnaliticaKafkaTest`, con
 un broker Kafka embebido: eventos de los dos tópicos, JSON ilegible y payload inválido al DLT, y la partición sigue después
 del error, y un error recuperable que se reintenta y se procesa a la tercera; `AnaliticaServiceTest`, `PosicionesPreviasTest`), `bff-pedidos360` (`SeguridadJwtTest`: roles, scopes y audiencia del JWT) y
 `ms-rabbitmq-admin` (`QueueRequestTest`: reglas de nombres y dead letter de una cola).
@@ -245,6 +251,12 @@ del error, y un error recuperable que se reintenta y se procesa a la tercera; `A
 Todo el sistema en un PC con Docker, Java 21 y Node, sin la cuenta de AWS ni el tenant de Entra: un IDaaS local de
 prueba firma los JWT (mismos claims) y publica su JWKS, y los servicios lo validan igual que a Entra. Pasos, arranque de
 los servicios y guion de la demo en `../demo-local/LEEME.md`.
+
+**Nube local** (`docker-compose.nube-local.yml`): Keycloak como IDaaS (tenant `pedidos360` con usuarios, roles Admin y
+Cliente y login OpenID Connect con PKCE, en lugar de Entra External ID) y Kong como API Manager (5 rutas `/api/**`, plugin
+`jwt` con la clave RS256 del tenant y `cors`, en lugar de AWS API Gateway). `bash nube-local/kong/configurar-kong.sh` carga
+la configuración en Kong, `IDAAS=keycloak bash ../demo-local/servicios.sh` hace que los servicios validen los tokens de
+Keycloak y `npm run local-completo` usa el frontend con los dos (sección 8 de `../demo-local/LEEME.md`).
 
 ## Ejecutar / desplegar en EC2
 

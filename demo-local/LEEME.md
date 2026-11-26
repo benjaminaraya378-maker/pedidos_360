@@ -5,6 +5,8 @@ el frontend. No usa la cuenta de AWS ni el tenant de Entra: un **IDaaS local de 
 JWT con los mismos claims que Entra External ID (`oid`, `roles`, `scp`, `name`, `email`) y publica su JWKS; los
 microservicios validan firma, emisor, audiencia, vigencia, rol y scope exactamente igual que en la nube.
 
+La sección 8 reemplaza además el IDaaS y el API Gateway por Keycloak y Kong en Docker (la "nube local").
+
 **Requisitos:** Docker Desktop abierto, Java 21, Maven, Node 20+ y Git Bash (en Windows). Unos 5 GB de RAM libres.
 Todos los comandos se corren desde la raíz del repositorio.
 
@@ -100,4 +102,50 @@ reales. Si el tiempo aprieta, se puede saltar el paso del evento en Kafka UI (*M
 
 Cerrar los procesos java (o `taskkill` por puerto), el IDaaS y `ng serve`; luego
 `docker compose -f docker-compose.kafka-ui.yml stop`, `docker compose -f docker-compose.kafka.yml stop`,
-`docker compose stop`, `docker stop pedidos360-mysql`, y cerrar Docker Desktop. Los volúmenes se conservan.
+`docker compose stop`, `docker compose -f docker-compose.nube-local.yml stop` (si se usó la sección 8),
+`docker stop pedidos360-mysql`, y cerrar Docker Desktop. Los volúmenes se conservan.
+
+## 8. Nube local: Keycloak (IDaaS) y Kong (API Manager)
+
+Reemplaza en el PC los dos servicios de nube que en EP1-EP4 no eran Docker: **Keycloak** hace de Entra External ID
+(tenant, usuarios, roles y login OAuth 2.0 / OpenID Connect con Authorization Code + PKCE) y **Kong** de AWS API Gateway
+(rutas `/api/**`, validación del JWT y CORS). Con esto no se usa el IDaaS local de la sección 2. Suma ~600 MB de RAM.
+
+```bash
+cd backend-pedidos360
+docker compose -f docker-compose.nube-local.yml up -d   # Keycloak :8180 · Kong :8000 (proxy), :8001 (admin), :8002 (Kong Manager)
+bash nube-local/kong/configurar-kong.sh                  # 5 rutas, plugin jwt con la clave RS256 del tenant y cors
+cd ..
+IDAAS=keycloak bash demo-local/servicios.sh              # los microservicios validan los JWT de Keycloak (keycloak.env)
+cd frontend-pedidos360 && npm run local-completo         # http://localhost:4200, etiqueta «Local: Keycloak + Kong»
+```
+
+- Usuarios del tenant: `admin` / `Admin.360` (Benjamin Araya, rol Admin) y `cliente` / `Cliente.360` (Oscar Baez, rol
+  Cliente). «Iniciar sesión» lleva a la pantalla de Keycloak y vuelve con la sesión; «Cerrar sesión» la cierra en Keycloak.
+- Consolas: Keycloak http://localhost:8180/admin (`admin` / `admin`) → realm *pedidos360* → *Users*, *Realm roles*,
+  *Clients*. Kong Manager http://localhost:8002 → *Gateway Services*, *Routes*, *Plugins*.
+- `configurar-kong.sh` se vuelve a correr si se recrea el contenedor de Kong o el de Keycloak (Kong no guarda la
+  configuración y la clave del tenant cambia si Keycloak parte de cero).
+- Con `IDAAS=keycloak` los servicios rechazan los tokens del IDaaS local (otro emisor); para volver al modo de las
+  secciones 2 a 4, reiniciarlos con `bash demo-local/servicios.sh`.
+
+Pruebas por Kong con curl (desde cualquier carpeta):
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:8180/realms/pedidos360/protocol/openid-connect/token \
+  -d grant_type=password -d client_id=pedidos360-cli -d username=cliente -d password=Cliente.360 \
+  | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')
+curl -s -o /dev/null -w "sin token: %{http_code}\n" http://localhost:8000/api/productos                       # 401 (Kong)
+curl -s -o /dev/null -w "con token: %{http_code}\n" -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/productos   # 200
+curl -s -o /dev/null -w "Cliente en ruta Admin: %{http_code}\n" -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/kafka/topics   # 403
+```
+
+Outbox (opcional, ~1 minuto): con los servicios arriba, `docker stop kafka1 kafka2 kafka3`, crear un pedido desde el
+frontend (responde al tiro y queda en CREADO), mostrar la fila con
+`docker exec pedidos360-mysql mysql -uroot -ppedidos360 -e "SELECT clave, intentos, ultimo_error FROM pedidos360_pedidos.eventos_kafka_pendientes"`,
+y `docker start kafka1 kafka2 kafka3`: en 10 a 30 s el relé lo publica y el pedido pasa solo a EN_PREPARACION.
+
+DLT (rol Admin): `GET http://localhost:8000/api/kafka/dlt/pedidos360.pedidos.dlt?max=5` muestra lo pendiente sin
+consumirlo y `POST .../reprocesar` con `{"max": 1}` lo devuelve a su tópico de origen.
+
+Capturas y transcripciones de todo esto: sección 13 del informe.

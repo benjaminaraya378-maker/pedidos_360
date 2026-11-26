@@ -53,6 +53,21 @@ adjunta el token a `/api/**`. Las vistas, guards de rol y llamadas son las misma
 firma, emisor, audiencia, rol y scope. La barra muestra la etiqueta «Demo local». `ng build` y `npm start` nunca
 incluyen este código. Los pasos completos, con el backend, están en `../demo-local/LEEME.md`.
 
+### Modo local completo (Keycloak + Kong en Docker)
+
+```bash
+npm run local-completo   # = ng serve --configuration local-completo · http://localhost:4200
+```
+
+Reemplaza los dos servicios de nube por sus equivalentes en Docker (`backend-pedidos360/docker-compose.nube-local.yml`):
+el login es real en **Keycloak** (realm `pedidos360`, en lugar de Entra External ID) con OpenID Connect, Authorization
+Code + PKCE S256 (`oidc-client-ts` en lugar de MSAL), y todas las llamadas van a **Kong** (`http://localhost:8000`, en
+lugar de AWS API Gateway), que valida el JWT y tiene CORS para `http://localhost:4200`. `angular.json` reemplaza
+`core/auth.providers.ts` por `core/auth.providers.local-completo.ts` (servicio, guard e interceptor en
+`core/local-completo/`) y `environment.ts` por `environment.local-completo.ts`. La barra muestra «Local: Keycloak + Kong».
+Usuarios: `admin` / `Admin.360` y `cliente` / `Cliente.360`. Pasos con el backend: sección 8 de `../demo-local/LEEME.md`.
+`ng build` de producción no incluye este código (se comprobó en el bundle).
+
 ## Vistas de EP5 (Kafka)
 
 | Ruta | Rol | Qué muestra | Backend |
