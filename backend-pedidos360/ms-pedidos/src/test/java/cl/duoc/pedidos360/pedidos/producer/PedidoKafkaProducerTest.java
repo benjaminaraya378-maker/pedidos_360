@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -27,15 +28,17 @@ import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.NotEnoughReplicasException;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.SendResult;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
 /**
- * El productor de ms-pedidos publica PEDIDO_CREADO después del commit sin esperar (la petición HTTP no depende de
- * Kafka) y PEDIDO_CONFIRMADO / PEDIDO_CANCELADO antes del commit esperando la confirmación: si Kafka no confirma, la
- * excepción deshace el cambio de estado y el evento de inventario se reintenta.
+ * El productor de ms-pedidos deja PEDIDO_CREADO en el outbox antes del commit, en la transacción del pedido y sin
+ * tocar Kafka (lo publica {@link OutboxKafka} después del commit), y publica PEDIDO_CONFIRMADO / PEDIDO_CANCELADO
+ * antes del commit esperando la confirmación: si Kafka no confirma, la excepción deshace el cambio de estado y el
+ * evento de inventario se reintenta.
  */
 class PedidoKafkaProducerTest {
 
@@ -43,17 +46,33 @@ class PedidoKafkaProducerTest {
 
   @SuppressWarnings("unchecked")
   private final KafkaTemplate<String, PedidoEvento> kafka = mock(KafkaTemplate.class);
-  private final PedidoKafkaProducer producer = new PedidoKafkaProducer(kafka, propiedades(), 200);
+  private final OutboxKafka outbox = mock(OutboxKafka.class);
+  private final PedidoKafkaProducer producer = new PedidoKafkaProducer(kafka, propiedades(), outbox, 200);
 
   @Test
-  void elCambioDeEstadoSePublicaAntesDelCommitYElPedidoNuevoDespues() throws Exception {
+  void elCambioDeEstadoYElPedidoNuevoSeResuelvenAntesDelCommitDentroDeLaTransaccion() throws Exception {
     TransactionalEventListener estado = PedidoKafkaProducer.class
         .getMethod("onEstadoCambiado", PedidoEstadoCambiadoEvent.class).getAnnotation(TransactionalEventListener.class);
     TransactionalEventListener creado = PedidoKafkaProducer.class
         .getMethod("onPedidoCreado", PedidoCreadoEvent.class).getAnnotation(TransactionalEventListener.class);
 
     assertThat(estado.phase()).isEqualTo(TransactionPhase.BEFORE_COMMIT);
-    assertThat(creado.phase()).isEqualTo(TransactionPhase.AFTER_COMMIT);
+    // El pedido nuevo se guarda en el outbox en la misma transacción: si el pedido no se guarda, el evento tampoco
+    assertThat(creado.phase()).isEqualTo(TransactionPhase.BEFORE_COMMIT);
+  }
+
+  @Test
+  void elPedidoNuevoSeRegistraEnElOutboxComoPedidoCreadoConSusItems() {
+    producer.onPedidoCreado(creado());
+
+    ArgumentCaptor<PedidoEvento> evento = ArgumentCaptor.forClass(PedidoEvento.class);
+    verify(outbox).registrar(eq(TOPICO), evento.capture());
+    assertThat(evento.getValue().tipo()).isEqualTo(TipoEventoPedido.PEDIDO_CREADO);
+    assertThat(evento.getValue().pedidoId()).isEqualTo(7L);
+    assertThat(evento.getValue().estado()).isEqualTo("CREADO");
+    assertThat(evento.getValue().eventoId()).hasSize(36);
+    assertThat(evento.getValue().items()).singleElement()
+        .satisfies(item -> assertThat(item.nombreProducto()).isEqualTo("Monitor"));
   }
 
   @Test
@@ -98,12 +117,15 @@ class PedidoKafkaProducerTest {
   }
 
   @Test
-  void elPedidoNuevoNoFallaSiKafkaNoRespondeElFalloQuedaEnElLog() {
+  void elPedidoNuevoNoFallaSiKafkaNoRespondeElEventoQuedaEnElOutbox() {
     when(kafka.send(anyString(), anyString(), any(PedidoEvento.class))).thenThrow(
         new org.springframework.kafka.KafkaException("Send failed",
             new org.apache.kafka.common.errors.TimeoutException("Topic pedidos360.pedidos not present in metadata")));
 
     assertThatCode(() -> producer.onPedidoCreado(creado())).doesNotThrowAnyException();
+    // Dentro de la transacción del pedido no se toca Kafka: el evento queda en el outbox
+    verify(kafka, never()).send(anyString(), anyString(), any(PedidoEvento.class));
+    verify(outbox).registrar(eq(TOPICO), argThat(e -> e.tipo() == TipoEventoPedido.PEDIDO_CREADO));
   }
 
   static CompletableFuture<SendResult<String, PedidoEvento>> confirmado(String clave, PedidoEvento evento) {

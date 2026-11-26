@@ -130,6 +130,14 @@ pedidos360:
       # este tiempo; si Kafka no confirma, se deshace el cambio de estado y el evento de inventario se reintenta.
       # Debe ser mayor que spring.kafka.producer.properties.delivery.timeout.ms
       espera-confirmacion-ms: ${KAFKA_ESPERA_CONFIRMACION_MS:15000}
+    outbox:
+      # PEDIDO_CREADO se guarda en la tabla eventos_kafka_pendientes en la misma transacción que el pedido y se
+      # publica después del commit. Si Kafka no lo confirma, el relé lo reintenta en cada vuelta hasta lograrlo
+      intervalo-ms: ${KAFKA_OUTBOX_INTERVALO_MS:2000}   # pausa entre una vuelta del relé y la siguiente
+      # El relé solo toma eventos con más de 20 s: para entonces el intento inmediato ya terminó (max.block.ms 5 s +
+      # delivery.timeout.ms 12 s) y no compiten. Si coincidieran, los consumidores descartan el duplicado por eventoId
+      antiguedad-minima-ms: 20000
+      lote: 50                        # eventos que el relé toma por vuelta
   comprobantes:
     # Carpeta donde se escriben los tickets generados por el consumidor de comprobantes
     directorio: ${COMPROBANTES_DIR:${java.io.tmpdir}/pedidos360-comprobantes}

@@ -193,6 +193,11 @@ public class KafkaAdminService {
     return obtenerCuando(nombre, d -> d.particiones() == total);
   }
 
+  /** Números de partición del tópico, en orden (404 si no existe). Lo usa el reproceso de DLT ({@link DltService}). */
+  public List<Integer> particionesDe(String nombre) {
+    return describir(nombre).partitions().stream().map(TopicPartitionInfo::partition).sorted().toList();
+  }
+
   public void eliminarTopico(String nombre) {
     if (props.topicosProtegidos().contains(nombre)) {
       throw new BusinessException(HttpStatus.CONFLICT,
@@ -420,7 +425,8 @@ public class KafkaAdminService {
     }
   }
 
-  private RuntimeException traducir(Throwable causa, String operacion) {
+  /** Error de Kafka → excepción con su código HTTP. También la usa {@link DltService} (consumidor y productor). */
+  static RuntimeException traducir(Throwable causa, String operacion) {
     String detalle = causa.getMessage();
     if (causa instanceof TopicExistsException) {
       return new BusinessException(HttpStatus.CONFLICT, "No se pudo " + operacion + ": el tópico ya existe");

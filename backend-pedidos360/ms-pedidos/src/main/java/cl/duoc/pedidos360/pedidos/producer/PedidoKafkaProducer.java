@@ -25,9 +25,11 @@ import org.springframework.transaction.event.TransactionalEventListener;
  * Productor Kafka del dominio pedidos: publica en el tópico {@code pedidos360.pedidos} cada cambio del pedido.
  *
  * <ul>
- *   <li>PEDIDO_CREADO: al guardarse un pedido nuevo (petición HTTP). Se publica <b>después del commit</b>, igual que
- *       en RabbitMQ: nunca se anuncia un pedido que no quedó guardado. Si Kafka no responde, el pedido igual se crea
- *       y el fallo queda en el log (limitación declarada: cerrarla requiere un patrón outbox).</li>
+ *   <li>PEDIDO_CREADO: al guardarse un pedido nuevo (petición HTTP). Pasa por el <b>outbox</b> ({@link OutboxKafka}):
+ *       antes del commit se guarda en la tabla {@code eventos_kafka_pendientes}, en la misma transacción que el
+ *       pedido, y después del commit se publica sin hacer esperar a la petición. Nunca se anuncia un pedido que no
+ *       quedó guardado, y si Kafka no responde el pedido igual se crea y el relé del outbox publica el evento cuando
+ *       Kafka vuelva: ya no se pierde.</li>
  *   <li>PEDIDO_CONFIRMADO / PEDIDO_CANCELADO: cuando el inventario respondió, mientras se procesa ese evento. Se
  *       publica <b>antes del commit y esperando la confirmación del broker</b>: si Kafka no confirma, se deshace el
  *       cambio de estado y el evento de inventario se reintenta (y termina en el DLT si Kafka sigue sin responder),
@@ -46,6 +48,7 @@ public class PedidoKafkaProducer {
 
   private final KafkaTemplate<String, PedidoEvento> kafkaTemplate;
   private final KafkaTopicosProperties props;
+  private final OutboxKafka outbox;
   private final long esperaConfirmacionMs;
 
   /**
@@ -53,17 +56,24 @@ public class PedidoKafkaProducer {
    *                             deshacer la transacción. Debe ser mayor que {@code delivery.timeout.ms} del productor
    */
   public PedidoKafkaProducer(KafkaTemplate<String, PedidoEvento> kafkaTemplate, KafkaTopicosProperties props,
+                             OutboxKafka outbox,
                              @Value("${pedidos360.kafka.publicacion.espera-confirmacion-ms:15000}")
                              long esperaConfirmacionMs) {
     this.kafkaTemplate = kafkaTemplate;
     this.props = props;
+    this.outbox = outbox;
     this.esperaConfirmacionMs = esperaConfirmacionMs;
   }
 
-  @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+  /**
+   * Corre dentro de la transacción de {@code PedidoService.crear}, justo antes del commit: guarda PEDIDO_CREADO en el
+   * outbox junto con el pedido. Aquí no se toca Kafka; la publicación ocurre después del commit (ver
+   * {@link OutboxKafka}). Si el INSERT del outbox falla, el pedido tampoco se guarda.
+   */
+  @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
   public void onPedidoCreado(PedidoCreadoEvent e) {
-    publicarSinEsperar(PedidoEvento.nuevo(TipoEventoPedido.PEDIDO_CREADO, e.pedidoId(), e.clienteOid(),
-        EstadoPedido.CREADO.name(), e.total(), null, items(e.items())));
+    outbox.registrar(props.topicos().pedidos().nombre(), PedidoEvento.nuevo(TipoEventoPedido.PEDIDO_CREADO,
+        e.pedidoId(), e.clienteOid(), EstadoPedido.CREADO.name(), e.total(), null, items(e.items())));
   }
 
   /**
@@ -77,23 +87,6 @@ public class PedidoKafkaProducer {
         : TipoEventoPedido.PEDIDO_CONFIRMADO;
     publicarYEsperar(PedidoEvento.nuevo(tipo, e.pedidoId(), e.clienteOid(), e.estado().name(), e.total(), e.motivo(),
         items(e.items())));
-  }
-
-  private void publicarSinEsperar(PedidoEvento evento) {
-    String topico = props.topicos().pedidos().nombre();
-    try {
-      kafkaTemplate.send(topico, String.valueOf(evento.pedidoId()), evento).whenComplete((resultado, error) -> {
-        if (error != null) {
-          log.error("No se pudo publicar {} del pedido {} en '{}': {}", evento.tipo(), evento.pedidoId(), topico,
-              error.getMessage());
-        } else {
-          publicado(evento, topico, resultado);
-        }
-      });
-    } catch (KafkaException | org.springframework.kafka.KafkaException ex) {
-      // Kafka no respondió a tiempo (max.block.ms): el pedido ya está guardado, solo se registra el fallo
-      log.error("Kafka no disponible: no se publicó {} del pedido {}", evento.tipo(), evento.pedidoId(), ex);
-    }
   }
 
   private void publicarYEsperar(PedidoEvento evento) {

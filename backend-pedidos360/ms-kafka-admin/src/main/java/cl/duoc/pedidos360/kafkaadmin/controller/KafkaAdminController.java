@@ -3,16 +3,22 @@ package cl.duoc.pedidos360.kafkaadmin.controller;
 import cl.duoc.pedidos360.kafkaadmin.dto.ConfiguracionRequest;
 import cl.duoc.pedidos360.kafkaadmin.dto.ParticionesRequest;
 import cl.duoc.pedidos360.kafkaadmin.dto.ReglasNombre;
+import cl.duoc.pedidos360.kafkaadmin.dto.ReprocesoRequest;
 import cl.duoc.pedidos360.kafkaadmin.dto.ResetOffsetsRequest;
 import cl.duoc.pedidos360.kafkaadmin.dto.Respuestas.Cluster;
+import cl.duoc.pedidos360.kafkaadmin.dto.Respuestas.ContenidoDlt;
 import cl.duoc.pedidos360.kafkaadmin.dto.Respuestas.GrupoDetalle;
 import cl.duoc.pedidos360.kafkaadmin.dto.Respuestas.GrupoResumen;
 import cl.duoc.pedidos360.kafkaadmin.dto.Respuestas.OffsetsMovidos;
+import cl.duoc.pedidos360.kafkaadmin.dto.Respuestas.ResultadoReproceso;
 import cl.duoc.pedidos360.kafkaadmin.dto.Respuestas.TopicoDetalle;
 import cl.duoc.pedidos360.kafkaadmin.dto.Respuestas.TopicoResumen;
 import cl.duoc.pedidos360.kafkaadmin.dto.TopicoRequest;
+import cl.duoc.pedidos360.kafkaadmin.service.DltService;
 import cl.duoc.pedidos360.kafkaadmin.service.KafkaAdminService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Pattern;
 import java.net.URI;
 import java.util.List;
@@ -42,6 +48,8 @@ import org.springframework.web.bind.annotation.RestController;
  *   GET    /api/kafka/consumer-groups/{grupo}               miembros, asignación, offsets, lag 200 · 400 · 404
  *   POST   /api/kafka/consumer-groups/{grupo}/offsets       mueve offsets (reprocesar/saltar)  200 · 400 · 404 · 409
  *   DELETE /api/kafka/consumer-groups/{grupo}               elimina un grupo sin consumidores  204 · 404 · 409
+ *   GET    /api/kafka/dlt/{topicoDlt}?max=20                pendientes del DLT, sin consumir   200 · 400 · 404
+ *   POST   /api/kafka/dlt/{topicoDlt}/reprocesar            reinyecta en su tópico de origen   200 · 400 · 404 · 409
  * </pre>
  * Entradas inválidas → 400 con el detalle de cada campo. Kafka sin respuesta → 503.
  */
@@ -51,9 +59,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class KafkaAdminController {
 
   private final KafkaAdminService service;
+  private final DltService dlt;
 
-  public KafkaAdminController(KafkaAdminService service) {
+  public KafkaAdminController(KafkaAdminService service, DltService dlt) {
     this.service = service;
+    this.dlt = dlt;
   }
 
   @GetMapping("/cluster")
@@ -126,5 +136,24 @@ public class KafkaAdminController {
       @PathVariable @Pattern(regexp = ReglasNombre.GRUPO, message = ReglasNombre.MENSAJE_GRUPO) String grupo) {
     service.eliminarGrupo(grupo);
     return ResponseEntity.noContent().build();
+  }
+
+  // ---------- DLT (dead letter topics) ----------
+
+  /** Lo que reinyectaría el próximo reproceso: posición, origen, excepción y valor de cada mensaje. No consume nada. */
+  @GetMapping("/dlt/{topicoDlt}")
+  public ContenidoDlt listarDlt(
+      @PathVariable @Pattern(regexp = ReglasNombre.TOPICO, message = ReglasNombre.MENSAJE_TOPICO) String topicoDlt,
+      @RequestParam(defaultValue = "20") @Min(value = 1, message = "mínimo 1")
+      @Max(value = 100, message = "máximo 100") int max) {
+    return dlt.listar(topicoDlt, max);
+  }
+
+  /** Reinyecta hasta {@code max} mensajes pendientes en su tópico de origen y confirma su offset en el DLT. */
+  @PostMapping("/dlt/{topicoDlt}/reprocesar")
+  public ResultadoReproceso reprocesarDlt(
+      @PathVariable @Pattern(regexp = ReglasNombre.TOPICO, message = ReglasNombre.MENSAJE_TOPICO) String topicoDlt,
+      @Valid @RequestBody ReprocesoRequest req) {
+    return dlt.reprocesar(topicoDlt, req.max());
   }
 }

@@ -61,4 +61,56 @@ public final class Respuestas {
 
   /** Resultado de mover offsets: posición nueva de cada partición. */
   public record OffsetsMovidos(String grupo, String topico, String estrategia, Map<Integer, Long> nuevosOffsets) {}
+
+  /**
+   * GET /api/kafka/dlt/{topicoDlt}: lo que el próximo reproceso reinyectaría, leído sin confirmar offsets (consultarlo
+   * no cambia nada).
+   *
+   * @param grupoReproceso consumer group con que ms-kafka-admin recuerda hasta dónde reprocesó el DLT
+   * @param pendientes     mensajes del DLT que aún no se reprocesan, sumando todas las particiones
+   * @param particiones    desde dónde y hasta dónde quedan pendientes en cada partición
+   * @param mensajes       los primeros pendientes (como máximo {@code max}), por partición y offset
+   */
+  public record ContenidoDlt(String topico, String grupoReproceso, long pendientes,
+                             List<PendientesParticion> particiones, List<MensajeDlt> mensajes) {}
+
+  /**
+   * @param siguiente offset del próximo mensaje a reprocesar en la partición
+   * @param offsetFin offset siguiente al último mensaje escrito en la partición del DLT
+   * @param pendientes offsetFin - siguiente
+   */
+  public record PendientesParticion(int particion, long siguiente, long offsetFin, long pendientes) {}
+
+  /**
+   * Un mensaje del DLT con lo que le agregó el {@code DeadLetterPublishingRecoverer} del servicio que no lo pudo
+   * procesar (headers {@code kafka_dlt-*}).
+   *
+   * @param fecha           cuándo llegó al DLT (ISO-8601)
+   * @param topicoOrigen    tópico al que se reinyectaría (header {@code kafka_dlt-original-topic}, o el nombre del DLT
+   *                        sin {@code .dlt} si el header falta)
+   * @param particionOrigen partición donde estaba el evento original
+   * @param offsetOrigen    offset que tenía el evento original
+   * @param grupoOrigen     consumer group que no lo pudo procesar
+   * @param excepcion       clase de la excepción que lo mandó al DLT (la causa raíz si viene)
+   * @param motivo          mensaje de la excepción, recortado
+   * @param valor           contenido como texto UTF-8, recortado a 500 caracteres (null si el valor es nulo)
+   * @param bytes           tamaño real del valor en bytes
+   */
+  public record MensajeDlt(int particion, long offset, String fecha, String clave, String topicoOrigen,
+                           Integer particionOrigen, Long offsetOrigen, String grupoOrigen, String excepcion,
+                           String motivo, String valor, int bytes) {}
+
+  /**
+   * POST /api/kafka/dlt/{topicoDlt}/reprocesar.
+   *
+   * @param reinyectados mensajes publicados de nuevo en su tópico de origen (y confirmados en el grupo de reproceso)
+   * @param pendientes   mensajes que siguen en el DLT sin reprocesar después de esta operación
+   * @param detalle      de dónde salió cada mensaje en el DLT y dónde quedó en el tópico de origen
+   */
+  public record ResultadoReproceso(String topicoDlt, String grupoReproceso, int reinyectados, long pendientes,
+                                   List<Reinyeccion> detalle) {}
+
+  /** Un mensaje reinyectado: posición en el DLT → tópico, partición y offset nuevos en el tópico de origen. */
+  public record Reinyeccion(int particionDlt, long offsetDlt, String clave, String topico, int particion,
+                            long offset) {}
 }
