@@ -13,6 +13,8 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.ErrorResponse;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.ResourceAccessException;
 
@@ -43,6 +45,14 @@ public class GlobalExceptionHandler {
   @ExceptionHandler(HttpMessageNotReadableException.class)
   public ResponseEntity<ApiError> unreadable(HttpMessageNotReadableException ex, HttpServletRequest req) {
     return build(HttpStatus.BAD_REQUEST, "Cuerpo de la petición malformado o vacío", req, List.of());
+  }
+
+  /** Un parámetro de la URL con el tipo equivocado (por ejemplo /api/pedidos/abc, donde va un número): 400, no 500. */
+  @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+  public ResponseEntity<ApiError> tipoInvalido(MethodArgumentTypeMismatchException ex, HttpServletRequest req) {
+    String tipo = ex.getRequiredType() == null ? "otro tipo" : ex.getRequiredType().getSimpleName();
+    return build(HttpStatus.BAD_REQUEST, "Parámetro inválido: '" + ex.getName() + "' debe ser de tipo " + tipo,
+        req, List.of());
   }
 
   /** @PreAuthorize fallido dentro de un controlador: 403 (nunca 500). */
@@ -82,6 +92,16 @@ public class GlobalExceptionHandler {
 
   @ExceptionHandler(Exception.class)
   public ResponseEntity<ApiError> generic(Exception ex, HttpServletRequest req) {
+    // Errores propios de Spring MVC (405 método no permitido, 404 ruta inexistente, 415...): su código, no 500
+    if (ex instanceof ErrorResponse er && er.getStatusCode().is4xxClientError()) {
+      HttpStatus status = HttpStatus.valueOf(er.getStatusCode().value());
+      String mensaje = switch (status) {
+        case METHOD_NOT_ALLOWED -> "Método " + req.getMethod() + " no permitido en " + req.getRequestURI();
+        case NOT_FOUND -> "No existe la ruta " + req.getRequestURI();
+        default -> "Petición no válida (" + status.value() + " " + status.getReasonPhrase() + ")";
+      };
+      return build(status, mensaje, req, List.of());
+    }
     log.error("Error no controlado en {} {}", req.getMethod(), req.getRequestURI(), ex);
     return build(HttpStatus.INTERNAL_SERVER_ERROR, "Error interno del servicio", req, List.of());
   }
