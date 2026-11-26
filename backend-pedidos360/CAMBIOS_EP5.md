@@ -14,7 +14,7 @@ stock y responde; el pedido se confirma o se cancela solo, y una analítica en t
 | Microservicio administrador: crear, listar y mantener tópicos y configuraciones | 6 % | `ms-kafka-admin`: `KafkaAdminController` → `KafkaAdminService` (`AdminClient`) |
 | Productores con DTO y serializers adecuados | 14 % | `ms-pedidos/.../pedidos/producer/PedidoKafkaProducer`, `ms-productos/.../inventario/producer/InventarioKafkaProducer`; `JsonSerializer` con tipo lógico en `__TypeId__` y `ByteArraySerializer` para reenviar al DLT mensajes ilegibles (`DelegatingByTypeSerializer`) |
 | Consumidores con `@KafkaListener`, lógica separada de la mensajería | 14 % | `ms-productos/.../inventario/consumer/PedidoEventoConsumer` → `InventarioService`; `ms-pedidos/.../pedidos/consumer/InventarioEventoConsumer` → `EstadoPedidoService`; `ms-analitica/.../analitica/consumer/AnaliticaConsumer` (`@KafkaHandler` por tipo) → `AnaliticaService` |
-| Manejo de errores: logging, validación de payloads, control de reintentos | 12 % | `KafkaConfig.kafkaErrorHandler` (`DefaultErrorHandler` + `ExponentialBackOffWithMaxRetries` 1 s/2 s/4 s + `DeadLetterPublishingRecoverer` a `*.dlt`; no recuperables sin reintentos: JSON ilegible, `@Valid`, `EventoInvalidoException`); idempotencia (`eventos_procesados`, bloqueo de filas); `InventarioKafkaProducer` publica antes del commit y espera la confirmación (si Kafka no confirma: rollback, reintento y DLT; 503 por HTTP); `ms-analitica` no vuelve a mandar al DLT al releer (`PosicionesPrevias`) |
+| Manejo de errores: logging, validación de payloads, control de reintentos | 12 % | `KafkaConfig.kafkaErrorHandler` (`DefaultErrorHandler` + `ExponentialBackOffWithMaxRetries` 1 s/2 s/4 s + `DeadLetterPublishingRecoverer` a `*.dlt`; no recuperables sin reintentos: JSON ilegible, `@Valid`, `EventoInvalidoException`); idempotencia (`eventos_procesados`, bloqueo de filas); `InventarioKafkaProducer` y los cambios de estado de `PedidoKafkaProducer` publican antes del commit y esperan la confirmación (si Kafka no confirma: rollback, reintento y DLT; 503 por HTTP); `ms-analitica` no vuelve a mandar al DLT al releer (`PosicionesPrevias`) y marca un evento como procesado solo al terminar; prueba de reintentos con Kafka embebido |
 | Parámetros de administración de tópicos ajustados a cada flujo | 12 % | `pedidos360.kafka.topicos` en `application.yml` + `KafkaConfig.topico()`: pedidos `delete` 7 días; inventario `compact` (clave = producto) con `min.compaction.lag.ms` 7 días y `segment.ms` 1 día; DLT `delete` 14 días; todos 3 particiones, 3 réplicas, `min.insync.replicas=2` |
 | Consumer groups para balancear carga y repartir responsabilidades | 12 % | `pedidos360.kafka.grupos`: `pedidos360-inventario`, `pedidos360-estado-pedidos`, `pedidos360-analitica`; 3 hilos por grupo: uno por partición en inventario y estado-pedidos; en analítica, 2 particiones por hilo (una de cada tópico) |
 | Operaciones replicables para crear, actualizar e inspeccionar tópicos y grupos | 6 % | `ms-kafka-admin` (`/api/kafka/topics`, `/config`, `/partitions`, `/consumer-groups`, `/offsets`) y `kafka/kafka-admin.sh` (CLI oficial dentro del broker) |
@@ -36,12 +36,15 @@ Instrucciones específicas: `docker-compose.kafka.yml` (3 Zookeeper + 3 brokers)
 | `ms-productos/.../kafka/*` | igual que en ms-pedidos; aquí `KafkaConfig` declara el tópico de inventario y su DLT |
 | `ms-productos/.../inventario/**` | consumidor de pedidos, `InventarioService` (descuento todo o nada, reposición), productor, `EventoProcesado` |
 | `ms-productos/.../inventario/producer/InventarioKafkaProducer` + `kafka/PublicacionKafkaException` | publica los eventos de stock antes del commit y espera la confirmación del broker; si no llega, la transacción se deshace (consumidor: reintento y DLT; HTTP: 503 en `GlobalExceptionHandler`) |
+| `ms-pedidos/.../pedidos/producer/PedidoKafkaProducer` + `kafka/PublicacionKafkaException` | PEDIDO_CONFIRMADO / PEDIDO_CANCELADO (publicados mientras se procesa un evento de inventario) se publican antes del commit esperando la confirmación; si Kafka no confirma se deshace el cambio de estado y el evento se reintenta. PEDIDO_CREADO sigue después del commit |
+| `ms-analitica/.../analitica/service/AnaliticaService` | marca un evento como procesado solo al terminar (un reintento tras un fallo no se descarta) |
+| `kafka/evento/*` (los 3 servicios) | `eventoId` con `@Size(max = 36)`, igual que la columna de `eventos_procesados` |
 | `ms-analitica/.../kafka/PosicionesPrevias` | recuerda la posición del grupo antes de releer desde el inicio, para no duplicar el DLT en cada reinicio |
 | `ms-productos/.../productos/controller/ProductoController` | `PATCH /api/productos/{id}/stock` (rol Admin) |
 | `ms-productos/.../productos/service/ProductoService` | anuncia el alta de un producto en Kafka |
 | `ms-analitica/**` (nuevo, puerto 8085) | consumidor de los dos tópicos y `GET /api/analitica/resumen` |
 | `ms-kafka-admin/**` (nuevo, puerto 8084) | API de administración de tópicos, configuraciones y consumer groups |
-| Pruebas (47) | `EstadoPedidoServiceTest`, `InventarioServiceTest`, `InventarioKafkaProducerTest`, `PublicacionAntesDelCommitTest`, `ProductoControllerTest`, `ConfiguracionesTopicoTest`, `AnaliticaKafkaTest` (Kafka embebido), `PosicionesPreviasTest`, `SeguridadJwtTest` (BFF), `QueueRequestTest` (ms-rabbitmq-admin) |
+| Pruebas (56) | `EstadoPedidoServiceTest`, `PedidoKafkaProducerTest`, `AnaliticaServiceTest`, `InventarioServiceTest`, `InventarioKafkaProducerTest`, `PublicacionAntesDelCommitTest`, `ProductoControllerTest`, `ConfiguracionesTopicoTest`, `AnaliticaKafkaTest` (Kafka embebido), `PosicionesPreviasTest`, `SeguridadJwtTest` (BFF), `QueueRequestTest` (ms-rabbitmq-admin) |
 
 ## Infraestructura nueva
 
@@ -102,7 +105,7 @@ Clúster real de `docker-compose.kafka.yml` + Kafka UI + RabbitMQ de EP4 + MySQL
 `ms-analitica` y `ms-kafka-admin` desde sus JAR. JWT firmados con una clave RSA local publicada como JWKS (misma estrategia
 que en EP4); los servicios validan firma, emisor, audiencia, rol y scope igual que con Entra.
 
-- `mvn test` (25-nov): 47 pruebas en verde en los 6 microservicios. `ng build` sin errores ni avisos.
+- `mvn test` (26-nov): 56 pruebas en verde en los 6 microservicios, incluida la de reintentos de un error recuperable con Kafka embebido. `ng build` sin errores ni avisos.
 - 6 contenedores `healthy`; Zookeeper con 1 líder y 2 seguidores; brokers 1, 2 y 3 registrados.
 - Los servicios dueños crearon los 4 tópicos al iniciar: 3 particiones, 3 réplicas, ISR completo, líderes repartidos en los
   3 brokers y la configuración de cada flujo. `kafka/verificar-ep5.sh`: todo OK (25 comprobaciones con el flujo de un
@@ -122,7 +125,7 @@ que en EP4); los servicios validan firma, emisor, audiencia, rol y scope igual q
   con lag 0 y las métricas completas.
 - Con `kafka3` detenido: el líder de su partición pasó a otro broker, el ISR quedó en 2 y un pedido nuevo se completó igual;
   al levantarlo volvió al ISR.
-- 25-nov, frontend en `npm run demo-local` (capturas en el informe, figuras 42 a 48): un pedido hecho desde la interfaz se
+- 25-nov, frontend en `npm run demo-local` (capturas en el informe, figuras 43 a 49): un pedido hecho desde la interfaz se
   ve en CREADO y pasa solo a EN_PREPARACION; una carrera por los últimos monitores deja uno cancelado con su motivo; la
   analítica, la reposición de stock y la vista Kafka (grupo EMPTY con lag 9 con la analítica detenida, y lag 0 al volver)
   funcionan con el IDaaS local. `ng build` en producción no incluye el código del modo demo.

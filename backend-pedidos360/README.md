@@ -192,8 +192,8 @@ propia clase (`spring.json.type.mapping`). Un tipo de evento nuevo se lee como `
 | Payload que no cumple el contrato (`@Valid`: id negativo, sin ítems...) | Al DLT sin reintentos |
 | Evento imposible de procesar (`EventoInvalidoException`, p. ej. pedido inexistente) | Al DLT sin reintentos |
 | Error recuperable (p. ej. base de datos) | Se reintenta con espera exponencial 1 s, 2 s, 4 s; agotados, al DLT |
-| Kafka no confirma el resultado del inventario (`PublicacionKafkaException`) | `InventarioKafkaProducer` publica antes del commit y espera la confirmación: se deshace el descuento y el registro del evento, se reintenta y, agotado, al DLT. Por HTTP (crear producto, reponer stock): 503 |
-| Relectura de `ms-analitica` al arrancar | Lo que ya se había mandado al DLT antes del reinicio no se vuelve a publicar (`PosicionesPrevias`) |
+| Kafka no confirma un evento que el consumidor publica (`PublicacionKafkaException`) | `InventarioKafkaProducer` (STOCK_*) y `PedidoKafkaProducer` (PEDIDO_CONFIRMADO/CANCELADO) publican antes del commit y esperan la confirmación: se deshace el descuento o el cambio de estado, el evento de origen se reintenta y, agotado, va al DLT. Por HTTP (crear producto, reponer stock): 503. `PEDIDO_CREADO` (petición HTTP) se publica después del commit |
+| Relectura de `ms-analitica` al arrancar | Lo que ya se había mandado al DLT antes del reinicio no se vuelve a publicar (`PosicionesPrevias`); un evento se marca como procesado solo al terminar, así un reintento no se descarta |
 
 Cada reintento y cada envío al DLT quedan en el log con tópico, partición, offset, clave y causa. En el DLT, Kafka agrega
 headers con el tópico, partición, offset y grupo de origen y la excepción. Un evento malo nunca detiene la partición.
@@ -233,11 +233,11 @@ stock de cada producto). Procesar es idempotente (por `eventoId` y reemplazando 
 
 ### Pruebas
 
-`mvn test` en cada servicio (47 pruebas en total): `ms-pedidos` (`EstadoPedidoServiceTest`), `ms-productos`
+`mvn test` en cada servicio (56 pruebas en total): `ms-pedidos` (`EstadoPedidoServiceTest`, `PedidoKafkaProducerTest`), `ms-productos`
 (`InventarioServiceTest`, `InventarioKafkaProducerTest`, `PublicacionAntesDelCommitTest`: rollback cuando Kafka no confirma,
 `ProductoControllerTest`: 503), `ms-kafka-admin` (`ConfiguracionesTopicoTest`), `ms-analitica` (`AnaliticaKafkaTest`, con
 un broker Kafka embebido: eventos de los dos tópicos, JSON ilegible y payload inválido al DLT, y la partición sigue después
-del error; `PosicionesPreviasTest`), `bff-pedidos360` (`SeguridadJwtTest`: roles, scopes y audiencia del JWT) y
+del error, y un error recuperable que se reintenta y se procesa a la tercera; `AnaliticaServiceTest`, `PosicionesPreviasTest`), `bff-pedidos360` (`SeguridadJwtTest`: roles, scopes y audiencia del JWT) y
 `ms-rabbitmq-admin` (`QueueRequestTest`: reglas de nombres y dead letter de una cola).
 
 ## Ejecutar en local, sin AWS (demo)

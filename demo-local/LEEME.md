@@ -66,17 +66,21 @@ bash rabbitmq/verificar-ep4.sh                                                  
 
 ## 6. Guion de la demo (lámina 13, unos 3 minutos)
 
-1. `docker compose -f docker-compose.kafka.yml ps` → 6 contenedores *healthy*.
-2. Kafka UI → *Topics* → `pedidos360.pedidos`: 3 particiones, 3 réplicas, un líder en cada broker.
+1. `docker ps --format "table {{.Names}}\t{{.Status}}"` → 3 Zookeeper, 3 brokers, Kafka UI y los 2 nodos de RabbitMQ
+   *healthy* / *Up*.
+2. Kafka UI → *Brokers* (3 brokers, controlador, URP 0) → *Topics* (los 2 tópicos y sus DLT, 3 particiones y 3
+   réplicas) → `pedidos360.inventario` → *Settings* (`cleanup.policy=compact`, `min.compaction.lag.ms`).
 3. Frontend como Cliente: *Catálogo* → «Agregar al pedido» → *Pedidos* → «Confirmar pedido». El pedido aparece en
    CREADO y, sin recargar, pasa a EN_PREPARACION.
 4. Kafka UI → *Messages* del tópico de pedidos: el evento con su clave, partición, offset y JSON.
 5. Frontend como Admin → *Analítica*: el pedido en «Últimos eventos» con tópico, partición y offset.
 6. Detener la analítica (cerrar su proceso java o `taskkill` del PID que escucha en 8085), crear 2 o 3 pedidos y abrir
-   *Kafka* → «Detalle» del grupo `pedidos360-analitica`: EMPTY y lag por partición. Luego
-   `bash demo-local/servicios.sh ms-analitica`: el grupo vuelve a STABLE y el lag a 0.
+   *Kafka* → «Detalle» del grupo `pedidos360-analitica`: EMPTY y lag por partición. Lo mismo en Kafka UI → *Consumers*
+   o con `bash kafka/kafka-admin.sh grupo pedidos360-analitica` (desde backend-pedidos360). Para no esperar en vivo,
+   relanzarla con `bash demo-local/servicios.sh ms-analitica` mientras se muestra Kafka UI: el grupo vuelve a STABLE
+   y el lag a 0.
 
-Si algo falla en vivo, las láminas 8, 9 y 11 y las figuras 42 a 48 del informe muestran los mismos pasos.
+Si algo falla en vivo, las láminas 8, 9 y 11 y las figuras 43 a 49 del informe muestran los mismos pasos.
 
 ## 7. Apagar
 
