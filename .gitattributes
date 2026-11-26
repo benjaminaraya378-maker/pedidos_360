@@ -1,0 +1,2 @@
+# Los scripts de bash siempre con fin de línea LF (en Windows, autocrlf los dejaba con CRLF y bash fuera de Git Bash falla)
+*.sh text eol=lf
