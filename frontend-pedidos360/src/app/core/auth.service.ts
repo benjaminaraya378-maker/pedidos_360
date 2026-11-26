@@ -22,6 +22,8 @@ export class AuthService {
   private readonly msal = inject(MsalService);
   private readonly broadcast = inject(MsalBroadcastService);
 
+  /** false con Entra; true solo en `npm run demo-local` (ver core/auth.providers.demo-local.ts). */
+  readonly modoDemoLocal: boolean = false;
   readonly account = signal<AccountInfo | null>(null);
   readonly accessToken = signal<string | null>(null);
   readonly interactionInProgress = signal(true);

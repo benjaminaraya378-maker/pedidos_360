@@ -4,5 +4,9 @@
 </main>
 <footer class="pie">
   <span>Pedidos360 · Desarrollo Cloud Native I · DSY1107</span>
-  <span>Angular + MSAL · AWS API Gateway · Spring Boot en EC2</span>
+  @if (auth.modoDemoLocal) {
+    <span>Demo local · Angular · IDaaS local · Spring Boot en este PC · RabbitMQ y Kafka en Docker</span>
+  } @else {
+    <span>Angular + MSAL · AWS API Gateway · Spring Boot en EC2</span>
+  }
 </footer>

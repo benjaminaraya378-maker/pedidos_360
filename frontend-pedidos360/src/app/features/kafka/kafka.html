@@ -24,7 +24,7 @@
   </section>
 }
 
-<div class="dos-columnas">
+<div class="disposicion">
   <div class="principal">
     <section class="tarjeta">
       <h2>Tópicos</h2>
@@ -71,42 +71,46 @@
       @if (grupos().length === 0) {
         <p class="silencio">No hay grupos todavía: aparecen cuando un microservicio empieza a consumir.</p>
       } @else {
-        <table class="tabla">
-          <thead><tr><th>Grupo</th><th>Estado</th><th class="numero">Miembros</th><th class="numero">Lag</th><th></th></tr></thead>
-          <tbody>
-            @for (g of grupos(); track g.grupo) {
-              <tr>
-                <td><code>{{ g.grupo }}</code></td>
-                <td><span class="etiqueta" [class.etiqueta--ok]="g.estado === 'STABLE'">{{ g.estado }}</span></td>
-                <td class="numero">{{ g.miembros }}</td>
-                <td class="numero" [class.lag]="g.lagTotal > 0">{{ g.lagTotal | number }}</td>
-                <td><button type="button" class="boton boton--secundario boton--pequeno" (click)="verGrupo(g.grupo)">Detalle</button></td>
-              </tr>
-            }
-          </tbody>
-        </table>
+        <div class="desplazable">
+          <table class="tabla">
+            <thead><tr><th>Grupo</th><th>Estado</th><th class="numero">Miembros</th><th class="numero">Lag</th><th></th></tr></thead>
+            <tbody>
+              @for (g of grupos(); track g.grupo) {
+                <tr>
+                  <td><code>{{ g.grupo }}</code></td>
+                  <td><span class="etiqueta" [class.etiqueta--ok]="g.estado === 'STABLE'">{{ g.estado }}</span></td>
+                  <td class="numero">{{ g.miembros }}</td>
+                  <td class="numero" [class.lag]="g.lagTotal > 0">{{ g.lagTotal | number }}</td>
+                  <td><button type="button" class="boton boton--secundario boton--pequeno" (click)="verGrupo(g.grupo)">Detalle</button></td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
       }
 
       @if (grupoAbierto(); as d) {
         <div class="detalle">
           <h3><code>{{ d.grupo }}</code> · {{ d.estado }} · asignador {{ d.asignador || '—' }} · coordinador broker {{ d.coordinador }}</h3>
-          <table class="tabla">
-            <thead>
-              <tr><th>Tópico</th><th class="numero">Part.</th><th class="numero">Confirmado</th><th class="numero">Fin</th><th class="numero">Lag</th><th>Consumidor</th></tr>
-            </thead>
-            <tbody>
-              @for (o of d.offsets; track o.topico + o.particion) {
-                <tr>
-                  <td><code>{{ o.topico }}</code></td>
-                  <td class="numero">{{ o.particion }}</td>
-                  <td class="numero">{{ o.offsetConfirmado ?? '—' }}</td>
-                  <td class="numero">{{ o.offsetFin }}</td>
-                  <td class="numero" [class.lag]="o.lag > 0">{{ o.lag }}</td>
-                  <td><code>{{ o.consumidor ?? 'sin asignar' }}</code></td>
-                </tr>
-              }
-            </tbody>
-          </table>
+          <div class="desplazable">
+            <table class="tabla">
+              <thead>
+                <tr><th>Tópico</th><th class="numero">Part.</th><th class="numero">Confirmado</th><th class="numero">Fin</th><th class="numero">Lag</th><th>Consumidor</th></tr>
+              </thead>
+              <tbody>
+                @for (o of d.offsets; track o.topico + o.particion) {
+                  <tr>
+                    <td><code>{{ o.topico }}</code></td>
+                    <td class="numero">{{ o.particion }}</td>
+                    <td class="numero">{{ o.offsetConfirmado ?? '—' }}</td>
+                    <td class="numero">{{ o.offsetFin }}</td>
+                    <td class="numero" [class.lag]="o.lag > 0">{{ o.lag }}</td>
+                    <td><code>{{ o.consumidor ?? 'sin asignar' }}</code></td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
           <button type="button" class="boton boton--secundario boton--pequeno" (click)="grupoAbierto.set(null)">Cerrar</button>
         </div>
       }

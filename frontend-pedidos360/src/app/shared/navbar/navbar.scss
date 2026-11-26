@@ -59,6 +59,16 @@
   &__usuario { display: flex; flex-direction: column; line-height: 1.15; text-align: right; }
   &__nombre { font-weight: 600; font-size: .95rem; }
   &__rol { font-size: .78rem; color: var(--ambar); }
+  &__demo {
+    padding: 2px 8px;
+    font-size: .72rem;
+    font-weight: 600;
+    letter-spacing: .02em;
+    text-transform: uppercase;
+    color: var(--ambar);
+    border: 1px solid var(--ambar);
+    border-radius: 999px;
+  }
 }
 @media (max-width: 760px) {
   .barra { gap: 12px; height: auto; flex-wrap: wrap; padding: 10px 16px; }

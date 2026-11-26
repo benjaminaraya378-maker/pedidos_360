@@ -6,10 +6,12 @@ Inicia sesión contra el tenant de **Microsoft Entra** con OpenID Connect (Autho
 
 ```
 src/app/
-├─ app.config.ts        # PublicClientApplication, MSAL_GUARD_CONFIG, MSAL_INTERCEPTOR_CONFIG (protectedResourceMap)
+├─ app.config.ts        # router, HttpClient, locale es-CL y los proveedores de autenticación
 ├─ app.routes.ts        # /productos, /pedidos, /perfil (MsalGuard) · /admin, /analitica, /kafka (MsalGuard + roleGuard('Admin'))
+├─ core/auth.providers.ts            # PublicClientApplication, MSAL_GUARD_CONFIG, MSAL_INTERCEPTOR_CONFIG (protectedResourceMap)
+├─ core/auth.providers.demo-local.ts # solo en `npm run demo-local`: sesión del IDaaS local en vez de MSAL (core/demo-local/)
 ├─ core/auth.service.ts # login/logout, acquireTokenSilent, roles y scopes leídos de los claims del access token
-├─ core/api.service.ts  # llamadas al API Gateway (/api/productos, /api/pedidos, /api/bff/**)
+├─ core/api.service.ts  # llamadas al API Gateway (/api/productos, /api/pedidos, /api/bff/**, /api/analitica/**, /api/kafka/**)
 └─ features/            # home (dashboard BFF), productos, pedidos, perfil (claims del token), admin, analitica (ms-analitica),
                          # kafka (ms-kafka-admin), no-autorizado
 ```
@@ -38,11 +40,24 @@ npm start            # http://localhost:4200 (proxy.conf.json envía /api/** a l
 npm run build:prod   # dist/frontend-pedidos360/browser → publicar en S3 + CloudFront (o similar con HTTPS)
 ```
 
+### Modo demo local (sin el tenant de Entra)
+
+```bash
+npm run demo-local   # = ng serve --configuration demo-local · http://localhost:4200  (?usuario=cliente para entrar como Cliente)
+```
+
+La configuración `demo-local` de `angular.json` reemplaza **solo** `core/auth.providers.ts` por
+`core/auth.providers.demo-local.ts` (y `environment.ts` por `environment.demo-local.ts`): la sesión la entrega el IDaaS
+local de `demo-local/idaas-local.mjs` a través del proxy (`proxy.demo-local.json`, ruta `/idaas`) y un interceptor
+adjunta el token a `/api/**`. Las vistas, guards de rol y llamadas son las mismas, y los microservicios siguen validando
+firma, emisor, audiencia, rol y scope. La barra muestra la etiqueta «Demo local». `ng build` y `npm start` nunca
+incluyen este código. Los pasos completos, con el backend, están en `../demo-local/LEEME.md`.
+
 ## Vistas de EP5 (Kafka)
 
 | Ruta | Rol | Qué muestra | Backend |
 |---|---|---|---|
-| `/pedidos` | Cliente/Admin | Un pedido nuevo aparece en CREADO y la vista vuelve a consultar cada 2 s hasta que el inventario (vía Kafka) lo pasa a EN_PREPARACION o CANCELADO, con el motivo | ms-pedidos |
+| `/pedidos` | Cliente/Admin | Un pedido nuevo aparece en CREADO y la vista vuelve a consultar cada 2 s (hasta 10 veces, unos 20 s) hasta que el inventario (vía Kafka) lo pasa a EN_PREPARACION o CANCELADO, con el motivo | ms-pedidos |
 | `/productos` | Admin | Botón *Reponer 10 unidades* (`PATCH /api/productos/{id}/stock`), que publica STOCK_REPUESTO en Kafka | ms-productos |
 | `/analitica` | Admin | Métricas en tiempo cuasi real (consulta cada 3 s): pedidos por estado, ventas, alertas de stock bajo y los últimos eventos con su tópico, partición, offset y clave | ms-analitica (`/api/analitica/resumen`) |
 | `/kafka` | Admin | Brokers y controlador; tópicos con particiones, líder de cada partición, ISR, retención y mensajes; consumer groups con lag por partición; crear tópico, cambiar retención y eliminar | ms-kafka-admin (`/api/kafka/**`) |

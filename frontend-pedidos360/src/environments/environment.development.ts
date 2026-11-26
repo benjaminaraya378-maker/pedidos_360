@@ -1,7 +1,7 @@
 /**
  * Configuración de DESARROLLO LOCAL (se usa con `ng serve`).
  * El frontend habla siempre con rutas /api/** ; en local, proxy.conf.json las
- * redirige a los microservicios que corren en tu máquina (8080/8081/8082),
+ * redirige a los microservicios que corren en tu máquina (8080/8081/8082/8084/8085),
  * imitando exactamente la forma de las rutas del API Gateway.
  */
 export const environment = {

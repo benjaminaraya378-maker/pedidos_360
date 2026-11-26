@@ -16,5 +16,12 @@
   padding-top: 12px;
   border-top: 1px solid var(--linea);
   h3 { font-size: 0.95rem; margin: 0 0 8px; }
+  > .boton { margin-top: 12px; }
 }
 h2 { margin-top: 0; font-size: 1.05rem; }
+
+/* Tablas a todo el ancho y los dos formularios debajo, lado a lado: con la columna lateral fija
+   las tablas de tópicos y grupos no cabían y quedaban tapadas. */
+.disposicion { display: grid; gap: 20px; grid-template-columns: minmax(0, 1fr); }
+.principal { grid-template-columns: minmax(0, 1fr); }
+.lateral { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }

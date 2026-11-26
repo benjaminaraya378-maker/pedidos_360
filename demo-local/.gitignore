@@ -1,0 +1,6 @@
+# Generados por idaas-local.mjs y servicios.sh: tokens firmados, variables, logs y comprobantes de la demo
+*.jwt
+*.pem
+idaas.env
+*.log
+comprobantes/

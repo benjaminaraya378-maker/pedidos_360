@@ -1,8 +1,8 @@
 /**
  * Configuración de PRODUCCIÓN (se usa con `ng build`).
  * Reemplaza los valores "REEMPLAZAR-*" con los datos de tu tenant de
- * Microsoft Entra External ID y de tu API Gateway (ver docs/01-azure-entra-external-id.md
- * y docs/02-aws-api-gateway.md).
+ * Microsoft Entra External ID y de tu API Gateway (ver la sección «Configuración» de
+ * frontend-pedidos360/README.md y la del API Gateway en backend-pedidos360/README.md).
  */
 export const environment = {
   production: true,
