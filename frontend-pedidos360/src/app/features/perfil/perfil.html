@@ -41,7 +41,7 @@
   </section>
   <section class="tarjeta">
     <h2>Claims del access token</h2>
-    <p class="silencio">Es el JWT que MsalInterceptor adjunta en cada llamada al API Gateway.</p>
+    <p class="silencio">Es el JWT que el interceptor HTTP adjunta en cada llamada al API Gateway.</p>
     <dl class="claves claves--compacta">
       @for (c of claimsAccess(); track c.clave) { <div><dt>{{ c.clave }}</dt><dd class="mono">{{ c.valor }}</dd></div> }
     </dl>

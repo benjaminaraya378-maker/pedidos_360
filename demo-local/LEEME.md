@@ -68,6 +68,10 @@ bash rabbitmq/verificar-ep4.sh                                                  
 
 ## 6. Guion de la demo (lámina 15, unos 3 minutos y medio)
 
+Con la nube local (sección 8), que es lo que muestra la lámina 15, el paso 4 se hace por Kong (`:8000`) con el token de
+Keycloak (comandos en la sección 8) y en el frontend se inicia sesión en Keycloak; el resto es igual. Si no alcanza la
+memoria, se usa el IDaaS local tal como está escrito aquí.
+
 1. `docker ps --format "table {{.Names}}\t{{.Status}}"` → 3 Zookeeper, 3 brokers, Kafka UI y los 2 nodos de RabbitMQ
    *healthy* / *Up*.
 2. Consola de RabbitMQ en http://localhost:15672 (guest / guest): *Overview* → *Nodes* (rabbit@rabbitmq1 y
@@ -148,4 +152,4 @@ y `docker start kafka1 kafka2 kafka3`: en 10 a 30 s el relé lo publica y el ped
 DLT (rol Admin): `GET http://localhost:8000/api/kafka/dlt/pedidos360.pedidos.dlt?max=5` muestra lo pendiente sin
 consumirlo y `POST .../reprocesar` con `{"max": 1}` lo devuelve a su tópico de origen.
 
-Capturas y transcripciones de todo esto: sección 13 del informe.
+Capturas y transcripciones: sección 7 del informe (outbox y DLT) y sección 13 (Keycloak y Kong).
