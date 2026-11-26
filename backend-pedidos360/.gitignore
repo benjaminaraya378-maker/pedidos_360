@@ -33,3 +33,6 @@ build/
 Thumbs.db
 *.log
 logs/
+
+# Generado por nube-local/kong/configurar-kong.sh (lleva la clave pública del realm vigente)
+nube-local/kong/kong.generado.yml

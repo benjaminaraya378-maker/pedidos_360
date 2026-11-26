@@ -5,6 +5,7 @@
     "ng": "ng",
     "start": "ng serve --proxy-config proxy.conf.json",
     "demo-local": "ng serve --configuration demo-local",
+    "local-completo": "ng serve --configuration local-completo",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "build:prod": "ng build --configuration production"
@@ -17,11 +18,12 @@
     "@angular/forms": "^21.2.0",
     "@angular/platform-browser": "^21.2.0",
     "@angular/router": "^21.2.0",
+    "@azure/msal-angular": "^6.2.0",
+    "@azure/msal-browser": "^5.21.0",
+    "oidc-client-ts": "3.5.0",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0",
-    "zone.js": "~0.16.0",
-    "@azure/msal-angular": "^6.2.0",
-    "@azure/msal-browser": "^5.21.0"
+    "zone.js": "~0.16.0"
   },
   "devDependencies": {
     "@angular/build": "^21.2.24",

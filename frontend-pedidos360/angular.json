@@ -85,6 +85,21 @@
                   "with": "src/app/core/auth.providers.demo-local.ts"
                 }
               ]
+            },
+            "local-completo": {
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true,
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.local-completo.ts"
+                },
+                {
+                  "replace": "src/app/core/auth.providers.ts",
+                  "with": "src/app/core/auth.providers.local-completo.ts"
+                }
+              ]
             }
           },
           "defaultConfiguration": "production"
@@ -101,6 +116,9 @@
             "demo-local": {
               "buildTarget": "frontend-pedidos360:build:demo-local",
               "proxyConfig": "proxy.demo-local.json"
+            },
+            "local-completo": {
+              "buildTarget": "frontend-pedidos360:build:local-completo"
             }
           },
           "defaultConfiguration": "development"

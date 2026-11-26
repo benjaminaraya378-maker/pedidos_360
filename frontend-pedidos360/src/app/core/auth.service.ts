@@ -22,8 +22,14 @@ export class AuthService {
   private readonly msal = inject(MsalService);
   private readonly broadcast = inject(MsalBroadcastService);
 
-  /** false con Entra; true solo en `npm run demo-local` (ver core/auth.providers.demo-local.ts). */
+  /**
+   * false con Entra; true en `npm run demo-local` (core/auth.providers.demo-local.ts) y en `npm run local-completo`
+   * (core/auth.providers.local-completo.ts). Las etiquetas dicen en la barra y el pie qué IDaaS y gateway se usan.
+   */
   readonly modoDemoLocal: boolean = false;
+  readonly etiquetaModo: string = '';
+  readonly detalleModo: string = '';
+  readonly pieModo: string = 'Angular + MSAL · AWS API Gateway · Spring Boot en EC2';
   readonly account = signal<AccountInfo | null>(null);
   readonly accessToken = signal<string | null>(null);
   readonly interactionInProgress = signal(true);

@@ -21,6 +21,9 @@ export class AuthDemoLocalService {
   private readonly router = inject(Router);
 
   readonly modoDemoLocal = true;
+  readonly etiquetaModo = 'Demo local';
+  readonly detalleModo = 'Token emitido por el IDaaS local de demo-local/idaas-local.mjs, no por Entra';
+  readonly pieModo = 'Demo local · Angular · IDaaS local · Spring Boot en este PC · RabbitMQ y Kafka en Docker';
   readonly accessToken = signal<string | null>(this.tokenGuardado());
   readonly interactionInProgress = signal(false);
 

@@ -5,11 +5,15 @@
 #   mvn -DskipTests package
 # Uso: bash demo-local/servicios.sh [ms-productos ms-pedidos ms-analitica ms-kafka-admin bff-pedidos360]
 #      (sin argumentos: los cinco). Logs en demo-local/<servicio>.log
+#      IDAAS=keycloak bash demo-local/servicios.sh  → valida los JWT del tenant de Keycloak (docker-compose.nube-local.yml)
 set -u
 S="$(cd "$(dirname "$0")" && pwd)"
 B="$(cd "$S/../backend-pedidos360" && pwd)"
-[ -f "$S/idaas.env" ] || { echo "Falta $S/idaas.env: corre primero  node demo-local/idaas-local.mjs"; exit 1; }
-set -a; . "$S/idaas.env"; set +a
+# IDaaS: por defecto el IDaaS local de prueba (idaas.env); con IDAAS=keycloak, el tenant de Keycloak (keycloak.env)
+ENV_IDAAS="$S/${IDAAS:-idaas}.env"
+[ -f "$ENV_IDAAS" ] || { echo "Falta $ENV_IDAAS: corre primero  node demo-local/idaas-local.mjs  (o usa IDAAS=keycloak)"; exit 1; }
+set -a; . "$ENV_IDAAS"; set +a
+echo "Emisor de los JWT: $JWT_ISSUER"
 export DB_USER="${DB_USER:-root}" DB_PASSWORD="${DB_PASSWORD:-pedidos360}"
 export RABBITMQ_ADDRESSES=localhost:5672,localhost:5673
 export KAFKA_BOOTSTRAP_SERVERS=localhost:9092,localhost:9093,localhost:9094

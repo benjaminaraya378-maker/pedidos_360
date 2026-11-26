@@ -1,0 +1,141 @@
+{
+  "realm": "pedidos360",
+  "displayName": "Pedidos360 (tenant local)",
+  "enabled": true,
+  "internationalizationEnabled": true,
+  "supportedLocales": ["es"],
+  "defaultLocale": "es",
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "accessTokenLifespan": 3600,
+  "ssoSessionIdleTimeout": 7200,
+  "roles": {
+    "realm": [
+      { "name": "Admin", "description": "Administra productos, analítica y Kafka" },
+      { "name": "Cliente", "description": "Compra y ve sus pedidos" }
+    ]
+  },
+  "users": [
+    {
+      "username": "admin",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Benjamin",
+      "lastName": "Araya",
+      "email": "admin@pedidos360.test",
+      "credentials": [{ "type": "password", "value": "Admin.360", "temporary": false }],
+      "realmRoles": ["Admin"]
+    },
+    {
+      "username": "cliente",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Oscar",
+      "lastName": "Baez",
+      "email": "cliente@pedidos360.test",
+      "credentials": [{ "type": "password", "value": "Cliente.360", "temporary": false }],
+      "realmRoles": ["Cliente"]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "pedidos360-web",
+      "name": "Pedidos360 Web (SPA)",
+      "description": "Frontend Angular: Authorization Code + PKCE, igual que la app Pedidos360-Web de Entra",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": ["http://localhost:4200/*"],
+      "webOrigins": ["http://localhost:4200"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:4200/*"
+      },
+      "protocolMappers": [
+        {
+          "name": "roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "config": {
+            "claim.name": "roles", "multivalued": "true", "jsonType.label": "String",
+            "access.token.claim": "true", "id.token.claim": "true", "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "oid",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "config": {
+            "user.attribute": "id", "claim.name": "oid", "jsonType.label": "String",
+            "access.token.claim": "true", "id.token.claim": "true", "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "scp",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-hardcoded-claim-mapper",
+          "config": {
+            "claim.name": "scp", "claim.value": "Pedidos360.Read Pedidos360.Write", "jsonType.label": "String",
+            "access.token.claim": "true", "id.token.claim": "false", "userinfo.token.claim": "false"
+          }
+        },
+        {
+          "name": "audiencia-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": { "included.custom.audience": "api-pedidos360", "access.token.claim": "true", "id.token.claim": "false" }
+        }
+      ]
+    },
+    {
+      "clientId": "pedidos360-cli",
+      "name": "Pruebas por consola (curl)",
+      "description": "Solo para la demo: obtiene tokens con usuario y clave para probar el API Gateway desde la terminal",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "protocolMappers": [
+        {
+          "name": "roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "config": {
+            "claim.name": "roles", "multivalued": "true", "jsonType.label": "String",
+            "access.token.claim": "true", "id.token.claim": "true", "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "oid",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "config": {
+            "user.attribute": "id", "claim.name": "oid", "jsonType.label": "String",
+            "access.token.claim": "true", "id.token.claim": "true", "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "scp",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-hardcoded-claim-mapper",
+          "config": {
+            "claim.name": "scp", "claim.value": "Pedidos360.Read Pedidos360.Write", "jsonType.label": "String",
+            "access.token.claim": "true", "id.token.claim": "false", "userinfo.token.claim": "false"
+          }
+        },
+        {
+          "name": "audiencia-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": { "included.custom.audience": "api-pedidos360", "access.token.claim": "true", "id.token.claim": "false" }
+        }
+      ]
+    }
+  ]
+}

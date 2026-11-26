@@ -22,7 +22,7 @@
 
   <div class="sesion">
     @if (auth.modoDemoLocal) {
-      <span class="sesion__demo" title="Token emitido por el IDaaS local de demo-local/idaas-local.mjs, no por Entra">Demo local</span>
+      <span class="sesion__demo" [title]="auth.detalleModo">{{ auth.etiquetaModo }}</span>
     }
     @if (auth.interactionInProgress()) {
       <span class="sesion__estado">Verificando sesión…</span>
